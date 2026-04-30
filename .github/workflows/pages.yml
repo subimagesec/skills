@@ -34,6 +34,11 @@ jobs:
 
       - name: Configure Pages
         uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5.0.0
+        with:
+          # Auto-enable GitHub Pages with build_type=workflow on first run.
+          # Avoids the chicken-and-egg of needing the UI to enable Pages
+          # before this workflow can deploy to it.
+          enablement: true
 
       - name: Upload Pages artifact
         # Upload the entire repo. Pages will serve every file as-is because
