@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>SubImage Skills</title>
+		<meta
+			name="description"
+			content="Claude Code marketplace for SubImage: setup recipes for IaC repos and operator workflows over the SubImage MCP server."
+		/>
+		<style>
+			:root {
+				color-scheme: light dark;
+				font-family:
+					ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+			}
+			body {
+				margin: 0;
+				min-height: 100dvh;
+				background: Canvas;
+				color: CanvasText;
+				display: flex;
+				justify-content: center;
+				padding: 3rem 1.5rem;
+			}
+			main {
+				max-width: 48rem;
+				width: 100%;
+			}
+			h1 {
+				font-size: 1.75rem;
+				font-weight: 600;
+				margin: 0 0 0.5rem;
+			}
+			p.lede {
+				margin: 0 0 1.5rem;
+				opacity: 0.75;
+				line-height: 1.5;
+			}
+			h2 {
+				font-size: 0.95rem;
+				font-weight: 600;
+				margin: 2rem 0 0.5rem;
+				text-transform: uppercase;
+				letter-spacing: 0.05em;
+				opacity: 0.6;
+			}
+			h3 {
+				font-size: 1.1rem;
+				font-weight: 600;
+				margin: 1.25rem 0 0.5rem;
+			}
+			pre {
+				background: color-mix(in oklab, CanvasText 6%, transparent);
+				border: 1px solid color-mix(in oklab, CanvasText 12%, transparent);
+				border-radius: 6px;
+				padding: 0.85rem 1rem;
+				overflow-x: auto;
+				margin: 0 0 1rem;
+				line-height: 1.45;
+			}
+			code {
+				font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+				font-size: 0.92em;
+			}
+			ul {
+				list-style: none;
+				padding: 0;
+				margin: 0 0 1.25rem;
+			}
+			li {
+				padding: 0.55rem 0;
+				border-top: 1px solid color-mix(in oklab, CanvasText 10%, transparent);
+				line-height: 1.5;
+			}
+			li:first-child {
+				border-top: 0;
+			}
+			a {
+				color: inherit;
+			}
+			.desc {
+				display: block;
+				opacity: 0.7;
+				font-size: 0.92em;
+				margin-top: 0.15rem;
+			}
+			.plugin-block {
+				border: 1px solid color-mix(in oklab, CanvasText 12%, transparent);
+				border-radius: 8px;
+				padding: 1rem 1.25rem;
+				margin-bottom: 1.25rem;
+			}
+			.plugin-block h3 {
+				margin-top: 0;
+			}
+			.plugin-block p {
+				margin: 0 0 0.75rem;
+				opacity: 0.8;
+				line-height: 1.5;
+			}
+			footer {
+				margin-top: 3rem;
+				font-size: 0.85em;
+				opacity: 0.6;
+				border-top: 1px solid color-mix(in oklab, CanvasText 10%, transparent);
+				padding-top: 1rem;
+			}
+		</style>
+	</head>
+	<body>
+		<main>
+			<h1>SubImage Skills</h1>
+			<p class="lede">
+				Claude Code marketplace for <a href="https://subimage.io">SubImage</a>, the
+				cloud-native security platform. Two plugins ship from this catalog: setup
+				recipes for IaC repos, and operator workflows over the SubImage MCP server.
+			</p>
+
+			<h2>Install</h2>
+			<pre><code>claude plugin marketplace add subimagesec/skills
+claude plugin install subimage-setup@subimage
+claude plugin install subimage-mcp@subimage</code></pre>
+
+			<h2>Plugins</h2>
+
+			<div class="plugin-block">
+				<h3>subimage-setup</h3>
+				<p>
+					Onboarding recipes for SubImage data sources from your IaC or CLI
+					environment. No SubImage tenant connection required to generate the IaC
+					code.
+				</p>
+				<ul>
+					<li>
+						<a href="/plugins/subimage-setup/skills/connect-aws/SKILL.md"
+							><code>connect-aws</code></a
+						>
+						<span class="desc"
+							>Deploy <code>SubImageScanRole</code> via CloudFormation StackSet,
+							Terraform, or aws-cli.</span
+						>
+					</li>
+					<li>
+						<a href="/plugins/subimage-setup/skills/connect-gcp/SKILL.md"
+							><code>connect-gcp</code></a
+						>
+						<span class="desc"
+							>Create the org-level service account and grant the IAM read roles
+							via Terraform or gcloud.</span
+						>
+					</li>
+					<li>
+						<a href="/plugins/subimage-setup/skills/connect-azure/SKILL.md"
+							><code>connect-azure</code></a
+						>
+						<span class="desc"
+							>Create a service principal with Reader on subscriptions or a
+							Management Group via Terraform or az.</span
+						>
+					</li>
+					<li>
+						<a
+							href="/plugins/subimage-setup/skills/connect-kubernetes-outpost/SKILL.md"
+							><code>connect-kubernetes-outpost</code></a
+						>
+						<span class="desc"
+							>Deploy the SubImage Outpost (Helm or Docker) so SubImage can reach
+							private APIs.</span
+						>
+					</li>
+					<li>
+						<a href="/plugins/subimage-setup/skills/connect-github/SKILL.md"
+							><code>connect-github</code></a
+						>
+						<span class="desc"
+							>Install the SubImage GitHub App, or wire a PAT for GitHub
+							Enterprise Server.</span
+						>
+					</li>
+				</ul>
+			</div>
+
+			<div class="plugin-block">
+				<h3>subimage-mcp</h3>
+				<p>
+					Operator workflows over the SubImage MCP server. Requires a connected
+					SubImage tenant; see the
+					<a href="https://app.subimage.io/docs/agents/connect_via_mcp"
+						>MCP setup docs</a
+					>.
+				</p>
+				<ul>
+					<li>
+						<a href="/plugins/subimage-mcp/skills/triage-new-findings/SKILL.md"
+							><code>triage-new-findings</code></a
+						>
+						<span class="desc"
+							>Frameworks-first findings digest with grouped themes and recommended
+							next steps.</span
+						>
+					</li>
+					<li>
+						<a href="/plugins/subimage-mcp/skills/investigate-cve/SKILL.md"
+							><code>investigate-cve</code></a
+						>
+						<span class="desc"
+							>Full impact and fixability for a specific CVE, with an opt-in
+							pivot to attack-path exploration.</span
+						>
+					</li>
+					<li>
+						<a href="/plugins/subimage-mcp/skills/review-attack-path/SKILL.md"
+							><code>review-attack-path</code></a
+						>
+						<span class="desc"
+							>Walk an attack path step by step, hunt for n+1 extensions, propose
+							the fastest fix.</span
+						>
+					</li>
+					<li>
+						<a
+							href="/plugins/subimage-mcp/skills/improve-cartography-coverage/SKILL.md"
+							><code>improve-cartography-coverage</code></a
+						>
+						<span class="desc"
+							>Scan the current repo for providers, cross-reference with
+							subimageListModules, surface top actionable findings.</span
+						>
+					</li>
+				</ul>
+			</div>
+
+			<h2>Marketplace catalog</h2>
+			<p>
+				The raw catalog is at
+				<a href="/.claude-plugin/marketplace.json"
+					><code>/.claude-plugin/marketplace.json</code></a
+				>. Claude Code reads it from the GitHub source, not from this site.
+			</p>
+
+			<footer>
+				Source on GitHub:
+				<a href="https://github.com/subimagesec/skills">subimagesec/skills</a>
+				&middot; Project home:
+				<a href="https://subimage.io">subimage.io</a>
+			</footer>
+		</main>
+	</body>
+</html>
