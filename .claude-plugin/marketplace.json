@@ -1,0 +1,37 @@
+{
+	"$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+	"name": "subimage",
+	"description": "Skills for AI agents working with SubImage, the cloud-native security platform. Setup recipes for IaC repos and operator workflows over the SubImage MCP server.",
+	"owner": {
+		"name": "SubImage",
+		"email": "support@subimage.io"
+	},
+	"plugins": [
+		{
+			"name": "subimage-setup",
+			"description": "Onboard cloud and SaaS data sources into SubImage from your IaC or CLI environment (AWS, GCP, Azure, GitHub, Kubernetes outpost). Terraform / CloudFormation / Helm / aws-cli / gcloud / az / gh paths.",
+			"version": "0.1.0",
+			"source": "./plugins/subimage-setup",
+			"author": {
+				"name": "SubImage",
+				"email": "support@subimage.io"
+			},
+			"category": "security",
+			"keywords": ["subimage", "cnapp", "iac", "terraform", "aws", "gcp", "azure", "github", "kubernetes"],
+			"homepage": "https://github.com/subimagesec/skills/tree/main/plugins/subimage-setup"
+		},
+		{
+			"name": "subimage-mcp",
+			"description": "Operator workflows over the SubImage MCP server: triage findings, investigate CVEs, review attack paths, and audit cartography coverage. Requires a connected SubImage tenant.",
+			"version": "0.1.0",
+			"source": "./plugins/subimage-mcp",
+			"author": {
+				"name": "SubImage",
+				"email": "support@subimage.io"
+			},
+			"category": "security",
+			"keywords": ["subimage", "cnapp", "mcp", "findings", "cve", "attack-path", "cartography"],
+			"homepage": "https://github.com/subimagesec/skills/tree/main/plugins/subimage-mcp"
+		}
+	]
+}

@@ -1,0 +1,12 @@
+{
+	"name": "subimage-mcp",
+	"description": "Operator workflows over the SubImage MCP server: triage findings, investigate CVEs, review attack paths, and audit cartography coverage. Requires a connected SubImage tenant.",
+	"version": "0.1.0",
+	"author": {
+		"name": "SubImage",
+		"email": "support@subimage.io"
+	},
+	"homepage": "https://github.com/subimagesec/skills/tree/main/plugins/subimage-mcp",
+	"repository": "https://github.com/subimagesec/skills",
+	"license": "MIT"
+}
