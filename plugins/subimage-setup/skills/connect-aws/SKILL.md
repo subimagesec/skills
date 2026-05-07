@@ -1,6 +1,6 @@
 ---
 name: connect-aws
-description: Wire one or more AWS accounts into SubImage by deploying the SubImageScanRole IAM role. Use when the user asks to "connect AWS to SubImage", "add an AWS account", "deploy SubImageScanRole", "set up AWS scanning", "wire an org into SubImage", or works in a Terraform/CloudFormation repo and wants SubImage to start collecting AWS data. Covers three deployment paths: CloudFormation StackSet (org-wide), Terraform, and manual aws-cli for one-off accounts.
+description: 'Wire one or more AWS accounts into SubImage by deploying the SubImageScanRole IAM role. Use when the user asks to "connect AWS to SubImage", "add an AWS account", "deploy SubImageScanRole", "set up AWS scanning", "wire an org into SubImage", or works in a Terraform/CloudFormation repo and wants SubImage to start collecting AWS data. Covers three deployment paths: CloudFormation StackSet (org-wide), Terraform, and manual aws-cli for one-off accounts.'
 ---
 
 # Connect AWS to SubImage

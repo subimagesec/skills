@@ -1,6 +1,6 @@
 ---
 name: review-attack-path
-description: Walk a SubImage attack path step by step, identify the most sensitive impacted assets, propose the fastest remediation, hunt for credible n+1 extensions the engine has not yet modeled, and optionally simulate what-if scenarios. Use when the user asks to "review this attack path", "explain this attack path", "what would happen if X is compromised", "what attack paths involve <asset>", "find lateral movement opportunities from <asset>", "assess the blast radius of <asset>", or pivots from `subimage-mcp:investigate-cve`. Three entry modes: by path id, by asset id, or n+1 extension hunt.
+description: 'Walk a SubImage attack path step by step, identify the most sensitive impacted assets, propose the fastest remediation, hunt for credible n+1 extensions the engine has not yet modeled, and optionally simulate what-if scenarios. Use when the user asks to "review this attack path", "explain this attack path", "what would happen if X is compromised", "what attack paths involve <asset>", "find lateral movement opportunities from <asset>", "assess the blast radius of <asset>", or pivots from `subimage-mcp:investigate-cve`. Three entry modes: by path id, by asset id, or n+1 extension hunt.'
 ---
 
 # Review an attack path
