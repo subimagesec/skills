@@ -23,19 +23,19 @@ Only these are addressed by this skill; nothing else.
 | Tool | Purpose |
 |---|---|
 | `subimageAgentBuildQuery(user_question, ...)` | Delegates schema exploration and query authoring to SubImage's internal query agent and returns a candidate Cypher statement. Default path. |
+| `searchModelQueries(labels=[...])` | Looks up previously cached "model queries" for a set of labels. Cheap to call, often returns a ready-made query you can adapt. |
+| `saveModelQuery(...)` | Caches a query you authored from scratch so future questions of the same shape are one tool call away. Call only after a successful execution returned meaningful rows. |
 | `subimageListModules()` | Confirms which modules are synced before querying their labels. |
 | `subimageListModuleSchemaNodes(module=...)` | Discovers candidate labels for a given module when you don't know them. |
 | `subimageGetNodesSchema(node_names=[...])` | Returns the validated label, property, and relationship surface for a list of labels. |
 | `subimageGetLabelStats(labels=[...])` | Returns cardinality per label; check when you suspect a label is high-cardinality (>10 000 nodes) and your query does not filter early. |
 | `subimageRunCypher(query)` | Executes one Cypher statement. Streams to the UI as an interactive table. |
 
-There is no public `searchModelQueries`, `saveModelQuery`, or `reportNeededImprovement` over MCP: those live inside the SubImage backend only. Do not try to call them.
-
 ## Path A: agent-delegated (default, recommended)
 
 Use this whenever the user gave you a natural-language question and you do not already have a candidate Cypher in hand.
 
-1. Call `subimageAgentBuildQuery(user_question=<the user's question, restated>)`. It returns a candidate Cypher query plus the labels it explored.
+1. Call `subimageAgentBuildQuery(user_question=<the user's question, restated>)`. It returns a candidate Cypher query plus the labels it explored. The builder already consults `searchModelQueries` internally, so do not pre-call it on this path.
 2. Read the returned query. Check it satisfies the **Final query rules** below. If not, refine the question (more specific labels, narrower scope) and call once more.
 3. Execute it via `subimageRunCypher(query=<final>)`.
 4. Summarize the result rows for the user. Do not reprint the table; `subimageRunCypher` already renders it.
@@ -52,14 +52,15 @@ Use only when:
 
 In parallel on the first turn, when the labels are obvious:
 
+- `searchModelQueries(labels=[...])` with those labels — if a cached query matches, adapt it instead of authoring from scratch.
 - `subimageGetNodesSchema(node_names=["LabelA", "LabelB", ...])` — batch every label you care about into one call. The tool resolves both primary labels and ontology aliases.
 - `subimageGetLabelStats(labels=[...])` — only if you suspect any of those labels is high-cardinality and your draft does not filter on it early.
 
-If labels are not obvious, first call `subimageListModules()` then `subimageListModuleSchemaNodes(module=<m>)` to find candidates, then fetch their schemas as above.
+If labels are not obvious, first call `subimageListModules()` then `subimageListModuleSchemaNodes(module=<m>)` to find candidates, then fetch their schemas as above (and re-run `searchModelQueries` with the resolved labels).
 
 If text matching is uncertain, run **one** exploratory probe with `subimageRunCypher` using `LIMIT 5` or `COUNT(*)`. Prefer `toLower(...) CONTAINS ...` for text discovery. Do not stack multiple speculative probes; refine the labels instead.
 
-When the query is ready, run it with `subimageRunCypher`.
+When the query is ready, run it with `subimageRunCypher`. If you authored it from scratch (no `searchModelQueries` hit) and execution returned meaningful rows, call `saveModelQuery` with a clear description and the labels involved so future questions of the same shape can skip the authoring step. Do not cache a query that only passed syntax: cache after the result is confirmed useful.
 
 ## Schema rules
 
@@ -99,8 +100,9 @@ Simplify before running:
 
 ## Anti-patterns
 
-- Calling tools that do not exist over MCP (`searchModelQueries`, `saveModelQuery`, `reportNeededImprovement`). These are backend-internal only and will fail.
 - Reframing the user's question and immediately running `subimageRunCypher` with a query authored from memory. Use Path A or Path B first to ground every label.
+- Pre-calling `searchModelQueries` before `subimageAgentBuildQuery` on Path A: the builder already consults the cache internally; you waste a turn.
+- Calling `saveModelQuery` on a query that only passed syntax. Cache only after a real execution returned useful rows.
 - Reformatting `subimageRunCypher` results as a markdown table. The tool streams an interactive table; summarize, do not duplicate.
 - Looping speculative probes ("try this, no, try that"). One probe with `LIMIT 5` or `COUNT(*)`, then commit.
 - Pre-loading the full schema "just in case" before Path A. The agent builder does that internally; you waste a turn and tokens.
