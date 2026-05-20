@@ -1,132 +1,118 @@
 ---
 name: build-cypher-query
-description: Build a verified Cypher query for the SubImage Neo4j graph by exploring the schema, reusing model queries, and validating with bounded probes. Use when the user asks a question that requires querying the graph and you need to construct (not just re-run) a Cypher statement.
+description: Build and run a verified Cypher query against the SubImage Neo4j graph. Use when the user asks a question whose answer requires graph traversal (cross-resource, identity, attack-surface, ownership) and you need to construct a query, not re-run a known one. Defaults to the agent-delegated builder; falls back to authoring by hand against the public schema tools when fine control is needed.
 ---
 
 # Build a Cypher query
 
-Produce a correct Cypher query that answers the user's question, as fast as possible, using the minimum number of tool calls.
+Produce a correct Cypher query that answers the user's question, in as few tool calls as possible, using only tools the SubImage MCP server actually exposes.
 
-## PRIORITIES
+## When to use
 
-1. Never guess the schema.
-2. Answer correctly.
-3. Be fast: parallelize tool calls and skip unnecessary discovery.
-4. Keep the final query as simple as possible.
-5. Run exactly one final query, or explain inline why no query can be built.
+✅ The answer requires joining nodes the user can name informally (services, accounts, users, vulnerabilities, attack paths).
+✅ The user pastes a question like "which EC2 instances have public IPs and an IAM role that can assume admin?" and wants the underlying data.
+✅ You already tried `subimageListModules` / `subimageGetVulnerabilityDetails` etc. and the answer needs more graph context.
 
-## SCHEMA RULES
+❌ A dedicated MCP tool answers the question directly (vulnerability lookup, framework findings, attack-path enumeration). Use the dedicated tool: it is faster, cached, and renders better in the UI.
+❌ The user has a known-good Cypher query in hand. Skip the builder and run `subimageRunCypher` directly.
 
-- Never invent node labels, property names, or relationship types.
-- Only use labels/properties/relationships that are present in the results of `subimageListModuleSchemaNodes` or `subimageGetNodesSchema`.
-- If the user requests a property or entity that does not exist in the schema, stop and explain that to the user inline.
-- Ontology labels (`User`, `Container`, `Image`, `ComputeInstance`, `Database`, `Group`, `Role`, ...) normalize node identity, not edges or every property. `subimageGetNodesSchema` returns one section per underlying primary label, review them all, and prefer the provider-native property over the `_ont_*` projection when both are listed (the ontology projection may be null on a tenant even when the provider-native field is populated).
+## Public MCP tools used
 
-## PARALLELIZE TOOL CALLS
+Only these are addressed by this skill; nothing else.
 
-Whenever multiple tool calls are independent, issue them **in the same turn** (parallel) instead of sequentially. Examples:
+| Tool | Purpose |
+|---|---|
+| `subimageAgentBuildQuery(user_question, ...)` | Delegates schema exploration and query authoring to SubImage's internal query agent and returns a candidate Cypher statement. Default path. |
+| `subimageListModules()` | Confirms which modules are synced before querying their labels. |
+| `subimageListModuleSchemaNodes(module=...)` | Discovers candidate labels for a given module when you don't know them. |
+| `subimageGetNodesSchema(node_names=[...])` | Returns the validated label, property, and relationship surface for a list of labels. |
+| `subimageGetLabelStats(labels=[...])` | Returns cardinality per label; check when you suspect a label is high-cardinality (>10 000 nodes) and your query does not filter early. |
+| `subimageRunCypher(query)` | Executes one Cypher statement. Streams to the UI as an interactive table. |
 
-- `searchModelQueries(labels=[...])` + `subimageGetNodesSchema(node_names=[...])` together on the first turn.
-- Batch every label you care about into a single `subimageGetNodesSchema` call (`node_names=["AWSAccount", "EC2Instance", "Container", ...]`). The tool resolves both primary labels and ontology aliases; you do not need a module hint.
-- `subimageListModules` + `subimageListModuleSchemaNodes(module=...)` together when both are needed.
-- `subimageGetLabelStats` alongside schema lookups when cardinality matters.
+There is no public `searchModelQueries`, `saveModelQuery`, or `reportNeededImprovement` over MCP: those live inside the SubImage backend only. Do not try to call them.
 
-Do NOT serialize calls that don't depend on each other.
+## Path A: agent-delegated (default, recommended)
 
-## WORKFLOW
+Use this whenever the user gave you a natural-language question and you do not already have a candidate Cypher in hand.
 
-Pick the fastest path that still guarantees a correct query. Do NOT run every step blindly.
+1. Call `subimageAgentBuildQuery(user_question=<the user's question, restated>)`. It returns a candidate Cypher query plus the labels it explored.
+2. Read the returned query. Check it satisfies the **Final query rules** below. If not, refine the question (more specific labels, narrower scope) and call once more.
+3. Execute it via `subimageRunCypher(query=<final>)`.
+4. Summarize the result rows for the user. Do not reprint the table; `subimageRunCypher` already renders it.
 
-### FAST PATH (preferred when applicable)
+This is one or two tool calls plus the execution. Do not pre-load schema with `subimageGetNodesSchema` before this path: the builder already does that internally.
 
-Use this when the user's question clearly maps to known node types or ontology aliases:
+## Path B: author by hand (fallback)
 
-1. In parallel, call:
-   - `searchModelQueries(labels=[...])` with the obvious labels
-   - `subimageGetNodesSchema(node_names=[...])` for those same labels
-2. If a model query matches, adapt it.
-3. Otherwise build the query directly from the fetched schema.
-4. Go to FINALIZE.
+Use only when:
 
-Skip `subimageListModules` / `subimageListModuleSchemaNodes` when the labels are obvious from the question. If you cannot name the labels at all, fall back to the SLOW PATH.
+- you already know the exact labels involved and the agent builder is overkill,
+- or you need a specific query shape the builder keeps refusing (custom `UNION`, exotic aggregation, etc.),
+- or `subimageAgentBuildQuery` returned a query that does not match the question after one refinement.
 
-### SLOW PATH (fallback when ambiguous)
+In parallel on the first turn, when the labels are obvious:
 
-Use this when you are not confident about which labels/modules are involved:
+- `subimageGetNodesSchema(node_names=["LabelA", "LabelB", ...])` — batch every label you care about into one call. The tool resolves both primary labels and ontology aliases.
+- `subimageGetLabelStats(labels=[...])` — only if you suspect any of those labels is high-cardinality and your draft does not filter on it early.
 
-1. Call `subimageListModules` and `subimageListModuleSchemaNodes` (in parallel where possible) to discover candidates.
-2. Fetch schemas for the candidate labels with `subimageGetNodesSchema` (batched in one call).
-3. Call `searchModelQueries` (in parallel with the schema fetch if labels are already known).
-4. If the question involves fuzzy text matching, unusual property values, or uncertain relationship paths, run **one** exploratory probe with `subimageRunCypher` using `LIMIT 5` or `COUNT(*)`. Prefer `toLower(...) CONTAINS ...` for text discovery. Do not stack multiple speculative probes.
-5. If a probe returns no results, try in this order, but only one alternative per round:
-   a. keep the relationship type but remove direction
-   b. try a bounded path `[*1..4]`
-   c. try alternative validated properties or labels
-6. Go to FINALIZE.
+If labels are not obvious, first call `subimageListModules()` then `subimageListModuleSchemaNodes(module=<m>)` to find candidates, then fetch their schemas as above.
 
-Only conclude no data exists after reasonable probing.
+If text matching is uncertain, run **one** exploratory probe with `subimageRunCypher` using `LIMIT 5` or `COUNT(*)`. Prefer `toLower(...) CONTAINS ...` for text discovery. Do not stack multiple speculative probes; refine the labels instead.
 
-## PERFORMANCE RULES
+When the query is ready, run it with `subimageRunCypher`.
 
-- **Never scan unlabeled nodes.** `MATCH (n)` without a label touches every node in the graph and is prohibitively slow. Every node pattern must include at least one label, e.g. `MATCH (n:EC2Instance)`. If you need to search across multiple labels, use `UNION` with one labeled `MATCH` per label, or filter with `WHERE n:LabelA OR n:LabelB` on a labeled starting pattern.
-- **Avoid cartesian products when possible.** Disconnected MATCH patterns without a join or shared variable create a cross-product that can be very expensive. Prefer explicit relationships or shared WHERE filters between patterns.
-- **Filter early on high-cardinality labels.** LIMIT only caps the number of output rows, it does NOT reduce compute time. If a label has many nodes, add WHERE filters to narrow the scan before any traversal or aggregation.
-- **Check cardinality only when it matters.** Call `subimageGetLabelStats` when you suspect a label is high-cardinality (>10 000 nodes) and your query does not already filter it early. Do not call it for every query.
+## Schema rules
 
-## FINAL QUERY RULES
+- Never invent node labels, property names, or relationship types. Use only what `subimageListModuleSchemaNodes` or `subimageGetNodesSchema` returned.
+- Ontology labels (`User`, `Container`, `Image`, `ComputeInstance`, `Database`, `Group`, `Role`, ...) normalize identity, not edges or every property. `subimageGetNodesSchema` returns one section per underlying primary label; review them all, and prefer the provider-native property over the `_ont_*` projection when both are listed (the ontology projection may be null on a tenant even when the provider-native field is populated).
+- If the user requests a property or entity that does not exist in the schema, stop and tell them inline. Do not guess.
 
-The final query must:
-- use only validated labels, properties, and relationships
-- every node variable must have at least one label (no bare `MATCH (n)`)
-- answer the user's question directly
-- include `LIMIT`
-- default to `LIMIT 100` unless the user asks otherwise
-- return only needed fields, not whole nodes
-- always include `n.id` (or the equivalent identity property) in the RETURN clause for every matched node, so results can be cross-referenced
-- use `OPTIONAL MATCH` only when missing relationships should still preserve rows
-- use explicit relationship types
-- never use unbounded variable-length paths
-- never use anonymous relationships
-- every path element must have a variable, even if unused in WHERE/RETURN (e.g. `(a)-[r1:TYPE]->(b)`, not `(a)-[:TYPE]->(b)` or `(a)-[]->(b)`)
+## Final query rules
 
-## SIMPLIFY BEFORE RUNNING
+The query passed to `subimageRunCypher` must:
 
-Before executing the final query:
-- remove unnecessary hops
-- remove unnecessary `WITH`
-- remove unnecessary `OPTIONAL MATCH`
-- prefer direct properties over extra traversal
-- return only the requested columns
+- use only validated labels, properties, and relationships,
+- give every node variable at least one label (no bare `MATCH (n)`); unlabeled scans touch the entire graph and time out,
+- give every relationship pattern a variable and an explicit type (e.g. `(a)-[r1:RELATES_TO]->(b)`; never `(a)-[:RELATES_TO]->(b)` or `(a)-[]->(b)`),
+- include `LIMIT`, default `LIMIT 100` unless the user asks otherwise,
+- return only the needed fields, not whole nodes,
+- always include `n.id` (or the equivalent identity property) in the `RETURN` clause for every matched node so results can be cross-referenced,
+- use `OPTIONAL MATCH` only when missing relationships should still preserve rows,
+- never use unbounded variable-length paths.
 
-## FINALIZE
+Performance:
 
-Once you have a candidate Cypher query that satisfies the rules above, run it with `subimageRunCypher`. This is the execution path the user sees: it streams results to the UI and renders the interactive table. Do NOT spend an extra tool call on a `COUNT(*)` or other end-of-run verification query just to prove the candidate parses, syntax is validated for you.
+- Filter early on high-cardinality labels. `LIMIT` only caps output rows; it does not reduce compute time. Add `WHERE` filters to narrow the scan before any traversal or aggregation.
+- Avoid disconnected `MATCH` patterns without a shared variable; they create a cartesian product.
 
-Use `subimageRunCypher` for exploratory probes only when the schema, path, or data shape is still uncertain. Otherwise, run it once for the final answer.
+Simplify before running:
 
-Execution rules:
-- Each call to `subimageRunCypher` must contain exactly one executable Cypher statement.
-- If you cannot build a valid query (missing schema, ambiguous question, no matching data after probing), do not run a speculative query. Explain to the user what is missing and what they could clarify.
+- remove unnecessary hops, `WITH`, `OPTIONAL MATCH`,
+- prefer direct properties over extra traversal,
+- return only the columns the user asked for.
 
-## CACHE SUCCESSFUL QUERIES
+## Execution rules
 
-If you built a query from scratch (no `searchModelQueries` hit) and a probe or execution confirmed it works and returned meaningful results, call `saveModelQuery` with a clear description and the labels involved. Do not cache a query based on syntax-only acceptance. This speeds up future questions of the same shape.
-
-## SPECIAL CASES
-
-- For cross-provider questions, check for unified ontology/common node types before using provider-specific labels.
-- For admin access questions, check both direct and indirect privilege paths, including managed policies, inline policies, wildcard `Allow` permissions, and assume-role chains.
-- Use `UNION` and `RETURN DISTINCT` only when required.
+- Each `subimageRunCypher` call must contain exactly one executable Cypher statement.
+- Do not run a redundant `COUNT(*)` after the final query "to verify it parses". `subimageRunCypher` validates syntax on the way in.
+- If you cannot build a valid query (missing schema, ambiguous question, no matching data after one probe), do not run a speculative query. Explain to the user what is missing and what they could clarify.
 
 ## Anti-patterns
 
-- Inventing node labels, property names, or relationship types that "sound right". Every label and property must come from `subimageGetNodesSchema` or `subimageListModuleSchemaNodes` results, not from memory or analogy with another tenant.
-- Writing `MATCH (n)` with no label. Unlabeled scans touch every node in the graph and time out on real tenants; every node pattern must carry at least one label.
-- Reformatting `subimageRunCypher` results as a markdown table. The tool streams results to the UI as an interactive table already; summarize, do not duplicate.
-- Running speculative `subimageRunCypher` probes in a loop ("try this, no, try that, no, try this"). Probe once with `LIMIT 5` or `COUNT(*)` when uncertain, then commit to the final query.
-- Skipping `searchModelQueries` and rebuilding a query from scratch when a saved one matches. Adapt the model query first; fall back to schema-driven authoring only when nothing matches.
-- Running a redundant `COUNT(*)` after the final query just to "verify it parses". Syntax is validated by `subimageRunCypher` itself.
+- Calling tools that do not exist over MCP (`searchModelQueries`, `saveModelQuery`, `reportNeededImprovement`). These are backend-internal only and will fail.
+- Reframing the user's question and immediately running `subimageRunCypher` with a query authored from memory. Use Path A or Path B first to ground every label.
+- Reformatting `subimageRunCypher` results as a markdown table. The tool streams an interactive table; summarize, do not duplicate.
+- Looping speculative probes ("try this, no, try that"). One probe with `LIMIT 5` or `COUNT(*)`, then commit.
+- Pre-loading the full schema "just in case" before Path A. The agent builder does that internally; you waste a turn and tokens.
+- Calling `subimageGetLabelStats` for every query. Only check when a label is plausibly large and your query does not already filter it.
 
-## IMPROVEMENT REPORTING
+## Special cases
 
-You have access to `reportNeededImprovement`. Call it proactively whenever you notice something that could be better in the schema, missing properties, awkward relationships, missing node types, data sources not ingested, etc. Report it even if you managed to build the query successfully.
+- Cross-provider questions: check for unified ontology / common node types before using provider-specific labels.
+- Admin access questions: check both direct and indirect privilege paths, including managed policies, inline policies, wildcard `Allow` permissions, and assume-role chains.
+- Use `UNION` and `RETURN DISTINCT` only when required.
+
+## References
+
+- Canonical doc: https://app.subimage.io/docs/agents/connect_via_mcp
+- The MCP tool selection guide is auto-loaded by the first call to `subimageReadMe`; rely on it for tool-to-domain mapping.
