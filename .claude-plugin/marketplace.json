@@ -22,7 +22,7 @@
 		},
 		{
 			"name": "subimage-mcp",
-			"description": "Operator workflows over the SubImage MCP server: triage findings, investigate CVEs, review attack paths, and audit cartography coverage. Requires a connected SubImage tenant.",
+			"description": "Operator workflows over the SubImage MCP server: triage findings, investigate CVEs, review attack paths, audit SubImage coverage, and build Cypher queries against the graph. Requires a connected SubImage tenant.",
 			"version": "0.1.0",
 			"source": "./plugins/subimage-mcp",
 			"author": {
@@ -30,7 +30,7 @@
 				"email": "support@subimage.io"
 			},
 			"category": "security",
-			"keywords": ["subimage", "cnapp", "mcp", "findings", "cve", "attack-path", "cartography"],
+			"keywords": ["subimage", "cnapp", "mcp", "findings", "cve", "attack-path", "cypher", "neo4j"],
 			"homepage": "https://github.com/subimagesec/skills/tree/main/plugins/subimage-mcp"
 		}
 	]

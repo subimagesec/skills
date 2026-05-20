@@ -38,7 +38,7 @@ The user is connected to SubImage via MCP and has the `subimageReadMe` global to
 
 Call `subimageListFrameworks`. Identify which are enabled. Note their slugs and display names. Common frameworks: `cis-aws`, `cis-gcp`, `cis-azure`, `subimage`, plus any custom ones.
 
-If zero enabled, stop and tell the user: "No compliance frameworks are enabled. Enable one in **Settings → Frameworks**, or run `subimage-mcp:improve-cartography-coverage` to suggest which ones make sense given the connected modules."
+If zero enabled, stop and tell the user: "No compliance frameworks are enabled. Enable one in **Settings → Frameworks**, or run `subimage-mcp:improve-subimage-coverage` to suggest which ones make sense given the connected modules."
 
 ### 2. List rules per framework
 

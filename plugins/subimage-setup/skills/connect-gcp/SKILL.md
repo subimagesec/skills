@@ -36,7 +36,7 @@ Required at the organization level (or at the chosen scope):
 
 | Role | Purpose |
 |---|---|
-| `roles/iam.securityReviewer` | Read IAM policies and relationships |
+| `roles/iam.securityReviewer` | Read IAM policies, relationships, and Workload Identity Federation pools/providers. If you substitute a custom role, also grant `iam.workloadIdentityPools.list` + `iam.workloadIdentityPoolProviders.list` (or attach `roles/iam.workloadIdentityPoolViewer`), otherwise WIF pools and providers are silently skipped. |
 | `roles/resourcemanager.organizationViewer` | Discover the org, projects, and folders |
 | `roles/resourcemanager.folderViewer` | Enumerate folder hierarchy |
 

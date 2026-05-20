@@ -16,8 +16,9 @@ claude plugin install subimage-setup@subimage
 | [`subimage-setup:connect-aws`](./skills/connect-aws/SKILL.md) | Deploy `SubImageScanRole` via CloudFormation StackSet, Terraform, or `aws-cli`. |
 | [`subimage-setup:connect-gcp`](./skills/connect-gcp/SKILL.md) | Create the org-level service account and grant the IAM read roles via Terraform or `gcloud`. |
 | [`subimage-setup:connect-azure`](./skills/connect-azure/SKILL.md) | Create a service principal with `Reader` on subscriptions or a Management Group via Terraform or `az`. |
-| [`subimage-setup:connect-kubernetes-outpost`](./skills/connect-kubernetes-outpost/SKILL.md) | Deploy the SubImage Outpost (Helm or Docker) so SubImage can reach private APIs (private EKS/GKE/AKS, on-prem Jamf, etc.). |
+| [`subimage-setup:connect-kubernetes-outpost`](./skills/connect-kubernetes-outpost/SKILL.md) | Deploy the SubImage Outpost (Helm or Docker) so SubImage can reach private APIs (private Kubernetes clusters, on-prem Jamf, etc.). |
 | [`subimage-setup:connect-github`](./skills/connect-github/SKILL.md) | Install the SubImage GitHub App, or wire a PAT for GitHub Enterprise Server. |
+| [`subimage-setup:connect-declarative-schema`](./skills/connect-declarative-schema/SKILL.md) | Bring custom context (service catalogs, ownership, CMDB) into the graph: JSONL data, YAML schema, and S3 or GCS plumbing. |
 
 ## Prerequisites
 

@@ -1,9 +1,9 @@
 ---
-name: improve-cartography-coverage
-description: Audit the current repo for cloud / SaaS providers that are NOT yet wired into SubImage, then check whether the SubImage compliance framework is enabled and surface its top actionable findings. Use when the user asks to "improve SubImage coverage", "what should I connect to SubImage", "audit cartography coverage", "what's missing in my SubImage setup", or runs this on a recurring schedule against their IaC repo. Closes the loop between "I have IaC defining X" and "SubImage tells me what's wrong with X".
+name: improve-subimage-coverage
+description: Audit the current repo for cloud / SaaS providers that are NOT yet wired into SubImage, then check whether the SubImage compliance framework is enabled and surface its top actionable findings. Use when the user asks to "improve SubImage coverage", "what should I connect to SubImage", "audit SubImage coverage", "what's missing in my SubImage setup", or runs this on a recurring schedule against their IaC repo. Closes the loop between "I have IaC defining X" and "SubImage tells me what's wrong with X".
 ---
 
-# Improve cartography coverage
+# Improve SubImage coverage
 
 ## What this does
 
@@ -33,7 +33,7 @@ This is the bridge between IaC reality and SubImage observability. Most other sk
 
 ### 1. Detect providers from the local repo
 
-Build a set `detected_providers` from these signals. They are read-only; nothing here mutates the repo.
+Build a set `detected_providers` of raw Terraform provider names from these signals. They are read-only; nothing here mutates the repo. The next step normalizes this set to SubImage module slugs (`detected_modules`).
 
 **Terraform providers** (strongest signal):
 
@@ -43,16 +43,16 @@ grep -rEho 'provider[[:space:]]+"(aws|google|azurerm|github|kubernetes|okta|clou
   | sort -u
 ```
 
-Terraform provider name → SubImage module slug:
+Normalize each Terraform provider name to the matching SubImage module slug **before any diff**; the raw provider names and the module slugs are not the same vocabulary (`google` ≠ `gcp`, `azurerm` ≠ `azure`). Apply this map:
 
-| Provider | Module slug |
+| Terraform provider | SubImage module slug |
 |---|---|
 | `aws` | `aws` |
 | `google` | `gcp` |
 | `azurerm` | `azure` |
 | `github` | `github` |
 | `gitlab` | `gitlab` |
-| `kubernetes` (private endpoint) | implies `eks` + `connect-kubernetes-outpost` |
+| `kubernetes` | `kubernetes` (plus `connect-kubernetes-outpost` if the cluster API is private) |
 | `okta` | `okta` |
 | `cloudflare` | `cloudflare` |
 | `tailscale` | `tailscale` |
@@ -63,6 +63,8 @@ Terraform provider name → SubImage module slug:
 | `vercel` | `vercel` |
 | `sentinelone` | `sentinelone` |
 | `crowdstrike` | `crowdstrike` |
+
+After mapping, `detected_modules` is the **set of SubImage module slugs** the repo touches. Drop entries whose mapped slug is `none` — they cannot be a coverage gap by definition.
 
 **CLI / environment signals** (weaker, but useful when no IaC):
 
@@ -87,15 +89,17 @@ Treat manifest hits as additive but lower-confidence than Terraform providers.
 subimageListModules()
 ```
 
-Build set `enabled_modules` from rows where the module is enabled (configured and connected, not just listed).
+Build set `enabled_modules` from rows where the module is enabled (configured and connected, not just listed). The values here are SubImage module slugs (`aws`, `gcp`, `azure`, `kubernetes`, ...), which is why step 1 must normalize the Terraform provider names before this step runs.
 
 ### 3. Compute coverage gaps
 
-`coverage_gaps = detected_providers \ enabled_modules`
+`coverage_gaps = detected_modules \ enabled_modules`
+
+Both sides are SubImage module slugs after step 1's normalization. If you skipped the mapping, you will report false gaps (e.g. report `google` as missing while the `gcp` module is enabled).
 
 For each gap, classify:
 
-- **Tier 1 (skill exists)**: `aws`, `gcp`, `azure`, `github`, `kubernetes`/EKS-private (outpost). Link directly to the matching `subimage-setup:connect-<module>` skill (loaded by the SubImage marketplace plugin).
+- **Tier 1 (skill exists)**: `aws`, `gcp`, `azure`, `github`, `kubernetes` (use `connect-kubernetes-outpost` when the cluster API is private), `declarative_schema`. Link directly to the matching `subimage-setup:connect-<module>` skill (loaded by the SubImage marketplace plugin).
 - **Tier 2 (no skill yet)**: any other module SubImage supports. Link to `https://app.subimage.io/docs/modules/<module>`.
 - **No SubImage module**: e.g. `datadog`. Note it without a link.
 
@@ -122,7 +126,7 @@ subimageListRules(framework="<subimage-framework-slug>")
 Filter to rules with `findingsCount > 0`. Take the top 5 by:
 
 1. Severity (critical → high → medium → low)
-2. Recently-touched providers (rules whose resource type maps to a provider in `detected_providers` OR a provider just promoted out of the gap list)
+2. Recently-touched modules (rules whose resource type maps to a slug in `detected_modules` OR a module just promoted out of the gap list)
 3. Findings count (desc)
 
 For each top rule:
