@@ -16,7 +16,8 @@ claude plugin install subimage-mcp@subimage
 | [`subimage-mcp:triage-new-findings`](./skills/triage-new-findings/SKILL.md) | Frameworks-first findings digest with grouped themes and recommended next steps. |
 | [`subimage-mcp:investigate-cve`](./skills/investigate-cve/SKILL.md) | Full impact and fixability for a specific CVE, with an opt-in pivot to attack-path exploration. |
 | [`subimage-mcp:review-attack-path`](./skills/review-attack-path/SKILL.md) | Walk an attack path step by step, identify the most sensitive impacted assets, hunt for n+1 extensions, propose the fastest fix. |
-| [`subimage-mcp:improve-cartography-coverage`](./skills/improve-cartography-coverage/SKILL.md) | Scan the current repo for providers, cross-reference with `subimageListModules`, check the SubImage compliance framework, surface top actionable findings. |
+| [`subimage-mcp:improve-subimage-coverage`](./skills/improve-subimage-coverage/SKILL.md) | Scan the current repo for providers, cross-reference with `subimageListModules`, check the SubImage compliance framework, surface top actionable findings. |
+| [`subimage-mcp:build-cypher-query`](./skills/build-cypher-query/SKILL.md) | Construct a verified Cypher query against the SubImage Neo4j graph by exploring the schema, reusing model queries, and validating with bounded probes. |
 
 ## Prerequisites
 

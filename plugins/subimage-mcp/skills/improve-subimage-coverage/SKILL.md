@@ -1,9 +1,9 @@
 ---
-name: improve-cartography-coverage
-description: Audit the current repo for cloud / SaaS providers that are NOT yet wired into SubImage, then check whether the SubImage compliance framework is enabled and surface its top actionable findings. Use when the user asks to "improve SubImage coverage", "what should I connect to SubImage", "audit cartography coverage", "what's missing in my SubImage setup", or runs this on a recurring schedule against their IaC repo. Closes the loop between "I have IaC defining X" and "SubImage tells me what's wrong with X".
+name: improve-subimage-coverage
+description: Audit the current repo for cloud / SaaS providers that are NOT yet wired into SubImage, then check whether the SubImage compliance framework is enabled and surface its top actionable findings. Use when the user asks to "improve SubImage coverage", "what should I connect to SubImage", "audit SubImage coverage", "what's missing in my SubImage setup", or runs this on a recurring schedule against their IaC repo. Closes the loop between "I have IaC defining X" and "SubImage tells me what's wrong with X".
 ---
 
-# Improve cartography coverage
+# Improve SubImage coverage
 
 ## What this does
 

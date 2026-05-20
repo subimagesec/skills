@@ -38,7 +38,7 @@ subimageGetVulnerabilityDetails(cve_id="<CVE_ID>")
 
 This returns: severity, CVSS, KEV status, description, affected packages, affected resources (containers, images, compute instances), discovered date, fix availability flags.
 
-If the response is empty or 404, the CVE is not present in this tenant's data. Stop and tell the user: "SubImage has no record of `<CVE_ID>` in your environment. Either it does not affect any synced asset, or vulnerability scanning is not enabled for the relevant module. Run `subimage-mcp:improve-cartography-coverage` to check coverage."
+If the response is empty or 404, the CVE is not present in this tenant's data. Stop and tell the user: "SubImage has no record of `<CVE_ID>` in your environment. Either it does not affect any synced asset, or vulnerability scanning is not enabled for the relevant module. Run `subimage-mcp:improve-subimage-coverage` to check coverage."
 
 ### 2. If actionable, fetch fix details
 
