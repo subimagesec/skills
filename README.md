@@ -5,7 +5,7 @@ Claude Code marketplace for [SubImage](https://subimage.io), the cloud-native se
 Two plugins ship from this repo:
 
 - **`subimage-setup`** : onboarding recipes for cloud and SaaS data sources (AWS, GCP, Azure, GitHub, Kubernetes outpost). Terraform / CloudFormation / Helm / aws-cli / gcloud / az / gh paths. Designed to run inside an IaC or scripts repo.
-- **`subimage-mcp`** : operator workflows over the SubImage MCP server (triage findings, investigate CVEs, review attack paths, audit cartography coverage). Designed to run alongside an authenticated SubImage tenant.
+- **`subimage-mcp`** : operator workflows over the SubImage MCP server (triage findings, investigate CVEs, review attack paths, audit SubImage coverage, build Cypher queries against the graph). Designed to run alongside an authenticated SubImage tenant.
 
 The two are independent; install whichever your workflow needs.
 
@@ -25,11 +25,13 @@ After install, skills are namespaced under their plugin:
 /subimage-setup:connect-azure
 /subimage-setup:connect-kubernetes-outpost
 /subimage-setup:connect-github
+/subimage-setup:connect-declarative-schema
 
 /subimage-mcp:triage-new-findings
 /subimage-mcp:investigate-cve
 /subimage-mcp:review-attack-path
-/subimage-mcp:improve-cartography-coverage
+/subimage-mcp:improve-subimage-coverage
+/subimage-mcp:build-cypher-query
 ```
 
 Most are **model-invocable**: the agent picks them up automatically from the description when the user phrasing matches. You can also call any of them by name as a slash command.
@@ -54,13 +56,15 @@ plugins/
       connect-azure/SKILL.md
       connect-kubernetes-outpost/SKILL.md
       connect-github/SKILL.md
+      connect-declarative-schema/SKILL.md
   subimage-mcp/
     .claude-plugin/plugin.json
     skills/
       triage-new-findings/SKILL.md
       investigate-cve/SKILL.md
       review-attack-path/SKILL.md
-      improve-cartography-coverage/SKILL.md
+      improve-subimage-coverage/SKILL.md
+      build-cypher-query/SKILL.md
 ```
 
 ## Contributing
