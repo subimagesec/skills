@@ -118,6 +118,15 @@ If you built a query from scratch (no `searchModelQueries` hit) and a probe or e
 - For admin access questions, check both direct and indirect privilege paths, including managed policies, inline policies, wildcard `Allow` permissions, and assume-role chains.
 - Use `UNION` and `RETURN DISTINCT` only when required.
 
+## Anti-patterns
+
+- Inventing node labels, property names, or relationship types that "sound right". Every label and property must come from `subimageGetNodesSchema` or `subimageListModuleSchemaNodes` results, not from memory or analogy with another tenant.
+- Writing `MATCH (n)` with no label. Unlabeled scans touch every node in the graph and time out on real tenants; every node pattern must carry at least one label.
+- Reformatting `subimageRunCypher` results as a markdown table. The tool streams results to the UI as an interactive table already; summarize, do not duplicate.
+- Running speculative `subimageRunCypher` probes in a loop ("try this, no, try that, no, try this"). Probe once with `LIMIT 5` or `COUNT(*)` when uncertain, then commit to the final query.
+- Skipping `searchModelQueries` and rebuilding a query from scratch when a saved one matches. Adapt the model query first; fall back to schema-driven authoring only when nothing matches.
+- Running a redundant `COUNT(*)` after the final query just to "verify it parses". Syntax is validated by `subimageRunCypher` itself.
+
 ## IMPROVEMENT REPORTING
 
 You have access to `reportNeededImprovement`. Call it proactively whenever you notice something that could be better in the schema, missing properties, awkward relationships, missing node types, data sources not ingested, etc. Report it even if you managed to build the query successfully.
