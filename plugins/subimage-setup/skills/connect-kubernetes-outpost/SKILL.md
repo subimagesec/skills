@@ -1,6 +1,6 @@
 ---
 name: connect-kubernetes-outpost
-description: Deploy the SubImage Outpost so SubImage can reach private APIs (private EKS/GKE/AKS clusters, on-prem Jamf, internal CrowdStrike, etc.) via an outbound Tailscale tunnel. Use when the user asks to "deploy SubImage Outpost", "connect a private Kubernetes cluster to SubImage", "scan an internal API with SubImage", or works in a Helm/Terraform/Docker repo and needs SubImage to reach something not on the public internet. Covers Helm and Docker paths.
+description: Deploy the SubImage Outpost so SubImage can reach private APIs (private Kubernetes clusters, on-prem Jamf, internal CrowdStrike, etc.) via an outbound Tailscale tunnel. Use when the user asks to "deploy SubImage Outpost", "connect a private Kubernetes cluster to SubImage", "scan an internal API with SubImage", or works in a Helm/Terraform/Docker repo and needs SubImage to reach something not on the public internet. Covers Helm and Docker paths.
 ---
 
 # Connect a SubImage Outpost (private API access)
@@ -11,14 +11,14 @@ Deploys a lightweight container in the customer's private network that establish
 
 ## When to use
 
-✅ The target API is not reachable from the public internet (private EKS/GKE/AKS, on-prem services, VPN-only IT tools).
+✅ The target API is not reachable from the public internet (private Kubernetes clusters, on-prem services, VPN-only IT tools).
 ✅ User wants to scan an internal Jamf, BigFix, Kandji, SnipeIT, CrowdStrike, LastPass, or Semgrep instance.
 ✅ User wants the deployment committed in their Helm/Terraform repo.
 
 ❌ The cluster's API endpoint is public: no outpost needed; configure the EKS/GKE module directly.
 ❌ The user wants to grant in-cluster RBAC for SubImage to scan resources: that is the **EKS RBAC** step (Access Entries or `aws-auth` ConfigMap), separate from the outpost. Do that **after** the outpost is up.
 
-Outpost-eligible modules: `bigfix`, `crowdstrike`, `eks` (private endpoint), `jamf`, `kandji`, `lastpass`, `semgrep`, `snipeit`.
+Outpost-eligible modules: `bigfix`, `crowdstrike`, `jamf`, `kandji`, `kubernetes` (private API endpoint, EKS or self-managed), `lastpass`, `semgrep`, `snipeit`.
 
 ## Required inputs
 
@@ -110,6 +110,11 @@ docker run -d \
   ghcr.io/subimagesec/subimage-outpost:latest
 ```
 
+Optional env vars:
+
+- `ENVIRONMENT`: defaults to `prod`. Used in the Tailscale tag `tag:<TENANT_ID>-<ENVIRONMENT>-outpost`. All outposts in the same tenant+environment share that tag regardless of `NAME`.
+- `PROXY_HOST`: overrides the `Host` header sent to `PROXY_TARGET`. Useful when the target expects a virtual host different from the URL (e.g. `eks.internal.acme.com` while `PROXY_TARGET` is an IP).
+
 `?ephemeral=true` matters: the docker path requires it on the auth key (the Helm chart adds it automatically).
 
 For production stability, pin a version (`:1.0.0`) instead of `:latest` and roll forward intentionally.
@@ -143,7 +148,10 @@ Once the outpost is up, the actual scan still happens through whichever SubImage
 4. **Tailscale outpost hostname** field: enter `<TENANT_ID>-<NAME>-outpost` (or `<TENANT_ID>-subimage-outpost` if you used the default name).
 5. Save and **Run Sync**.
 
-EKS specifically supports a per-cluster override: when adding a cluster ARN, check **override outpost?** and enter the per-cluster hostname. That takes precedence over the module-level field.
+The Kubernetes module supports a per-row override that takes precedence over the module-level hostname:
+
+- **EKS rows**: when adding a cluster ARN, check **override outpost hostname?** and enter the per-cluster hostname.
+- **Self-managed rows**: enter the outpost hostname directly on the row.
 
 For private EKS, after the outpost is reachable you still need to grant cluster-level RBAC to `SubImageScanRole`. The full Access Entries / `aws-auth` recipe lives at https://app.subimage.io/docs/modules/eks. The short version:
 

@@ -61,6 +61,7 @@ The App uses short-lived installation tokens, supports multiple orgs (one instal
 
    **Organization permissions**
    - `Members: Read` (required): users, teams, memberships
+   - `Personal access tokens: Read` (optional, App-only): inventory of fine-grained PATs authorized for the org as `GitHubPersonalAccessToken` nodes. GitHub does not expose this endpoint to PAT-authenticated calls.
    - `Secrets: Read` (optional): org-level secret metadata
    - `Variables: Read` (optional): org Actions variables
 
