@@ -1,6 +1,6 @@
 ---
 name: build-cypher-query
-description: Build and run a verified Cypher query against the SubImage Neo4j graph. Use when the user asks a question whose answer requires graph traversal (cross-resource, identity, attack-surface, ownership) and you need to construct a query, not re-run a known one. Defaults to the agent-delegated builder; falls back to authoring by hand against the public schema tools when fine control is needed.
+description: Build and run a Cypher query against the SubImage Neo4j graph. Use when answering a question requires graph traversal (cross-resource, identity, attack-surface, ownership) and no dedicated MCP tool fits.
 ---
 
 # Build a Cypher query
@@ -14,7 +14,7 @@ Produce a correct Cypher query that answers the user's question, in as few tool 
 ✅ You already tried `subimageListModules` / `subimageGetVulnerabilityDetails` etc. and the answer needs more graph context.
 
 ❌ A dedicated MCP tool answers the question directly (vulnerability lookup, framework findings, attack-path enumeration). Use the dedicated tool: it is faster, cached, and renders better in the UI.
-❌ The user has a known-good Cypher query in hand. Skip the builder and run `subimageRunCypher` directly.
+❌ The user has a known-good Cypher query in hand. Skip this skill and run `subimageRunCypher` directly.
 
 ## Public MCP tools used
 
@@ -22,8 +22,7 @@ Only these are addressed by this skill; nothing else.
 
 | Tool | Purpose |
 |---|---|
-| `subimageAgentBuildQuery(user_question, ...)` | Delegates schema exploration and query authoring to SubImage's internal query agent and returns a candidate Cypher statement. Default path. |
-| `searchModelQueries(labels=[...])` | Looks up previously cached "model queries" for a set of labels. Cheap to call, often returns a ready-made query you can adapt. |
+| `searchModelQueries(labels=[...])` | Looks up previously cached "model queries" for a set of labels. Cheap, often returns a ready-made query you can adapt. |
 | `saveModelQuery(...)` | Caches a query you authored from scratch so future questions of the same shape are one tool call away. Call only after a successful execution returned meaningful rows. |
 | `subimageListModules()` | Confirms which modules are synced before querying their labels. |
 | `subimageListModuleSchemaNodes(module=...)` | Discovers candidate labels for a given module when you don't know them. |
@@ -31,36 +30,41 @@ Only these are addressed by this skill; nothing else.
 | `subimageGetLabelStats(labels=[...])` | Returns cardinality per label; check when you suspect a label is high-cardinality (>10 000 nodes) and your query does not filter early. |
 | `subimageRunCypher(query)` | Executes one Cypher statement. Streams to the UI as an interactive table. |
 
-## Path A: agent-delegated (default, recommended)
+## Workflow
 
-Use this whenever the user gave you a natural-language question and you do not already have a candidate Cypher in hand.
+The workflow has four sequential steps. Step 1 has two variants depending on whether the user's question already names the labels; steps 2, 3, and 4 are the same in both cases.
 
-1. Call `subimageAgentBuildQuery(user_question=<the user's question, restated>)`. It returns a candidate Cypher query plus the labels it explored. The builder already consults `searchModelQueries` internally, so do not pre-call it on this path.
-2. Read the returned query. Check it satisfies the **Final query rules** below. If not, refine the question (more specific labels, narrower scope) and call once more.
-3. Execute it via `subimageRunCypher(query=<final>)`.
-4. Summarize the result rows for the user. Do not reprint the table; `subimageRunCypher` already renders it.
+### Step 1 — Resolve labels
 
-This is one or two tool calls plus the execution. Do not pre-load schema with `subimageGetNodesSchema` before this path: the builder already does that internally.
+**Fast path (labels obvious from the question):** when the user's wording maps directly to labels (`EC2`, `IAMRole`, `User`, `Container`, `Vulnerability`, ...), skip discovery and go straight to step 2.
 
-## Path B: author by hand (fallback)
+**Slow path (labels ambiguous):** when the user's wording does not map cleanly to labels (e.g. "find anything exposed to the public"):
 
-Use only when:
+1. `subimageListModules()` to confirm which modules are synced.
+2. `subimageListModuleSchemaNodes(module=<m>)` on the modules that could host the answer, to enumerate candidate labels.
 
-- you already know the exact labels involved and the agent builder is overkill,
-- or you need a specific query shape the builder keeps refusing (custom `UNION`, exotic aggregation, etc.),
-- or `subimageAgentBuildQuery` returned a query that does not match the question after one refinement.
+Once you have a label shortlist, continue to step 2.
 
-In parallel on the first turn, when the labels are obvious:
+### Step 2 — Look up examples and schema in parallel
 
-- `searchModelQueries(labels=[...])` with those labels — if a cached query matches, adapt it instead of authoring from scratch.
-- `subimageGetNodesSchema(node_names=["LabelA", "LabelB", ...])` — batch every label you care about into one call. The tool resolves both primary labels and ontology aliases.
-- `subimageGetLabelStats(labels=[...])` — only if you suspect any of those labels is high-cardinality and your draft does not filter on it early.
+With the labels in hand, fire these calls on a single turn:
 
-If labels are not obvious, first call `subimageListModules()` then `subimageListModuleSchemaNodes(module=<m>)` to find candidates, then fetch their schemas as above (and re-run `searchModelQueries` with the resolved labels).
+- `searchModelQueries(labels=[...])` — looks up cached example queries for these labels. If a hit matches the question's shape, adapt it instead of authoring from scratch. (This is **not** label discovery — it requires the labels as input.)
+- `subimageGetNodesSchema(node_names=["LabelA", "LabelB", ...])` — batches every label into one call. Returns the validated properties and relationships. Resolves both primary labels and ontology aliases.
+- `subimageGetLabelStats(labels=[...])` — only if you suspect a label is high-cardinality and your draft will not filter on it early.
 
-If text matching is uncertain, run **one** exploratory probe with `subimageRunCypher` using `LIMIT 5` or `COUNT(*)`. Prefer `toLower(...) CONTAINS ...` for text discovery. Do not stack multiple speculative probes; refine the labels instead.
+Then either adapt the cached query or author one from the schema. Apply the **Final query rules** below.
 
-When the query is ready, run it with `subimageRunCypher`. If you authored it from scratch (no `searchModelQueries` hit) and execution returned meaningful rows, call `saveModelQuery` with a clear description and the labels involved so future questions of the same shape can skip the authoring step. Do not cache a query that only passed syntax: cache after the result is confirmed useful.
+### Step 3 — Optional probe (at most one)
+
+If after step 2 you are still uncertain about a property's actual values, the path's shape, or whether matching rows exist, run **one** probe with `subimageRunCypher` using `LIMIT 5` or `COUNT(*)`. Prefer `toLower(...) CONTAINS ...` for text discovery. Do not stack speculative probes; refine labels or filters instead.
+
+Skip this step entirely if step 2 left no ambiguity.
+
+### Step 4 — Execute and cache
+
+1. Run the final query with `subimageRunCypher(query=<final>)`. It streams to the UI as an interactive table; summarize the rows for the user, do not reprint the table.
+2. If you authored the query from scratch (no `searchModelQueries` hit) and execution returned meaningful rows, call `saveModelQuery` with a clear description and the labels involved so future questions of the same shape can skip the authoring step. Do not cache a query that only passed syntax: cache after the result is confirmed useful.
 
 ## Schema rules
 
@@ -100,12 +104,11 @@ Simplify before running:
 
 ## Anti-patterns
 
-- Reframing the user's question and immediately running `subimageRunCypher` with a query authored from memory. Use Path A or Path B first to ground every label.
-- Pre-calling `searchModelQueries` before `subimageAgentBuildQuery` on Path A: the builder already consults the cache internally; you waste a turn.
+- Reframing the user's question and immediately running `subimageRunCypher` with a query authored from memory. Always ground labels via `subimageGetNodesSchema` (or a `searchModelQueries` hit) first.
 - Calling `saveModelQuery` on a query that only passed syntax. Cache only after a real execution returned useful rows.
 - Reformatting `subimageRunCypher` results as a markdown table. The tool streams an interactive table; summarize, do not duplicate.
 - Looping speculative probes ("try this, no, try that"). One probe with `LIMIT 5` or `COUNT(*)`, then commit.
-- Pre-loading the full schema "just in case" before Path A. The agent builder does that internally; you waste a turn and tokens.
+- Pre-loading the full schema "just in case" via `subimageListModuleSchemaNodes` on every module. Only enumerate modules when the labels are genuinely unknown.
 - Calling `subimageGetLabelStats` for every query. Only check when a label is plausibly large and your query does not already filter it.
 
 ## Special cases
