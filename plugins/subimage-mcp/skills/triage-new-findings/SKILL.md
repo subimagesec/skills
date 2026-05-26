@@ -21,7 +21,7 @@ Walks SubImage's compliance frameworks → rules → findings hierarchy to produ
 
 ## Prerequisites
 
-The user is connected to SubImage via MCP and has the `subimageReadMe` global tool guide available. This skill assumes the role-based tools (`subimageListFrameworks`, `subimageListRules`, `subimageGetRuleFindings`, optionally `subimageSendNotification` and `subimageCreateTicket`) are reachable.
+The `subimageReadMe` global tool guide is available. This skill assumes the role-based tools (`subimageListFrameworks`, `subimageListRules`, `subimageGetRuleFindings`, optionally `subimageSendNotification` and `subimageCreateTicket`) are reachable.
 
 ## Optional inputs (ask only if relevant)
 

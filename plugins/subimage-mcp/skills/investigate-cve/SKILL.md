@@ -20,7 +20,7 @@ Given a CVE id, pulls SubImage's full picture for it: severity, KEV status, affe
 
 ## Prerequisites
 
-User is connected to SubImage via MCP. This skill uses `subimageGetVulnerabilityDetails`, `subimageGetFixDetails`, and (optionally) `subimageAgentBuildQuery` + `subimageRunCypher`. The pivot at the end uses `subimageGetAttackPathsFromAsset`.
+This skill uses `subimageGetVulnerabilityDetails`, `subimageGetFixDetails`, and (optionally) `subimageAgentBuildQuery` + `subimageRunCypher`. The pivot at the end uses `subimageGetAttackPathsFromAsset`.
 
 ## Required inputs
 

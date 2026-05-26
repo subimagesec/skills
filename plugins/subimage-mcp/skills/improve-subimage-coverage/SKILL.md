@@ -27,7 +27,7 @@ This is the bridge between IaC reality and SubImage observability. Most other sk
 ## Prerequisites
 
 - The skill runs against the **current working directory**. Run it from the root of the IaC or scripts repo to maximize signal.
-- Connected to SubImage via MCP (uses `subimageListModules`, `subimageListFrameworks`, `subimageListRules`, `subimageGetRuleFindings`).
+- Uses `subimageListModules`, `subimageListFrameworks`, `subimageListRules`, `subimageGetRuleFindings`.
 
 ## Workflow
 

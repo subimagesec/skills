@@ -28,7 +28,7 @@ Optional what-if simulation overlays any of the above.
 
 ## Prerequisites
 
-Connected via MCP. Uses `subimageListAttackPaths`, `subimageGetAttackPathDetails`, `subimageGetAttackPathsFromAsset`, `subimageGetScenarioCapabilities`, `subimageCreateAttackPathScenario`, `subimageRunCypher` (with `subimageAgentBuildQuery` to draft queries), `subimageListModuleSchemaNodes`, `subimageGetNodesSchema`, and `reportNeededImprovement`. Ticket and notification follow-ups use `subimageListLinearTeams`, `subimageCreateTicket`, `subimageSendNotification`.
+Uses `subimageListAttackPaths`, `subimageGetAttackPathDetails`, `subimageGetAttackPathsFromAsset`, `subimageGetScenarioCapabilities`, `subimageCreateAttackPathScenario`, `subimageRunCypher` (with `subimageAgentBuildQuery` to draft queries), `subimageListModuleSchemaNodes`, `subimageGetNodesSchema`, and `reportNeededImprovement`. Ticket and notification follow-ups use `subimageListLinearTeams`, `subimageCreateTicket`, `subimageSendNotification`.
 
 ## Required inputs
 
