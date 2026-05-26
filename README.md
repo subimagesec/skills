@@ -32,15 +32,16 @@ After install, skills are namespaced under their plugin:
 /subimage-mcp:review-attack-path
 /subimage-mcp:improve-subimage-coverage
 /subimage-mcp:build-cypher-query
+/subimage-mcp:create-custom-rule
 ```
 
 Most are **model-invocable**: the agent picks them up automatically from the description when the user phrasing matches. You can also call any of them by name as a slash command.
 
 ## Prerequisites
 
-`subimage-mcp` skills assume the SubImage MCP server is connected. Set that up first: https://app.subimage.io/docs/agents/connect_via_mcp
+`subimage-mcp` skills run against the SubImage MCP server: https://app.subimage.io/docs/agents/connect_via_mcp
 
-`subimage-setup` skills run anywhere a shell or IaC repo lives; no SubImage tenant connection is required to generate the IaC code (only to verify it afterwards).
+`subimage-setup` skills run anywhere a shell or IaC repo lives; no tenant connection is required to generate the IaC code (only to verify it afterwards).
 
 ## Repository layout
 
@@ -65,6 +66,7 @@ plugins/
       review-attack-path/SKILL.md
       improve-subimage-coverage/SKILL.md
       build-cypher-query/SKILL.md
+      create-custom-rule/SKILL.md
 ```
 
 ## Contributing
