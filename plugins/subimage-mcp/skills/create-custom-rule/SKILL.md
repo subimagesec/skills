@@ -134,7 +134,7 @@ Tell the user:
 
 ## Output
 
-A persisted custom rule in the tenant, plus a primed Cartography rule in the findings cache. Both are produced by the single `subimageCreateCustomRule` call.
+A persisted custom rule registered with the tenant, produced by the single `subimageCreateCustomRule` call. The rule definition is stored immediately; findings against it are computed on the next scheduled findings build (see Workflow step 6 and Verification).
 
 ## Verification
 

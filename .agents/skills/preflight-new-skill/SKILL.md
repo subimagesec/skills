@@ -96,7 +96,9 @@ If `$PATTERNS` is absent, fall back to generic heuristics that flag candidates w
   ```
 - tokens, credentials, emails of real people (only `support@subimage.io` and `noreply@anthropic.com` are acceptable in this repo):
   ```bash
-  grep -nE '[A-Za-z0-9._%+-]+@(?!subimage\.io|anthropic\.com|example\.)[A-Za-z0-9.-]+\.[A-Za-z]{2,}' "$SKILL_PATH" || echo "OK"
+  grep -noE '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}' "$SKILL_PATH" \
+    | grep -vE '@(subimage\.io|anthropic\.com|example\.(com|org|net))$' \
+    || echo "OK"
   grep -nE 'sk-[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{20,}|xox[baprs]-' "$SKILL_PATH" || echo "OK"
   ```
 
