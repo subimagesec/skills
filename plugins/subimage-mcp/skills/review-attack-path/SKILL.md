@@ -11,7 +11,7 @@ Three modes against the SubImage attack-path engine and the underlying Neo4j gra
 
 1. **Walk a known path** in plain English, surface the most sensitive terminal asset, and propose the fastest fix.
 2. **Pivot from an asset** to find which paths it sits on and review the worst.
-3. **Hunt for n+1 extensions**: probe the graph past a path's terminal node to find credible next steps the engine has not yet modeled, and report them via `reportNeededImprovement`.
+3. **Hunt for n+1 extensions**: probe the graph past a path's terminal node to find credible next steps the engine has not yet modeled, and surface them inline as candidate transitions.
 
 Optional what-if simulation overlays any of the above.
 
@@ -28,7 +28,7 @@ Optional what-if simulation overlays any of the above.
 
 ## Prerequisites
 
-Uses `subimageListAttackPaths`, `subimageGetAttackPathDetails`, `subimageGetAttackPathsFromAsset`, `subimageGetScenarioCapabilities`, `subimageCreateAttackPathScenario`, `subimageRunCypher` (with `subimageAgentBuildQuery` to draft queries), `subimageListModuleSchemaNodes`, `subimageGetNodesSchema`, and `reportNeededImprovement`. Ticket and notification follow-ups use `subimageListLinearTeams`, `subimageCreateTicket`, `subimageSendNotification`.
+Uses `subimageListAttackPaths`, `subimageGetAttackPathDetails`, `subimageGetAttackPathsFromAsset`, `subimageGetScenarioCapabilities`, `subimageCreateAttackPathScenario`, `subimageRunCypher` (with `subimageAgentBuildQuery` to draft queries), `subimageListModuleSchemaNodes`, and `subimageGetNodesSchema`. Ticket and notification follow-ups use `subimageListLinearTeams`, `subimageCreateTicket`, `subimageSendNotification`.
 
 ## Required inputs
 
@@ -87,7 +87,7 @@ This is what the analyst mode adds: inspect the terminal node of a path and prob
 2. Inspect what the schema says lives next to that node:
    ```
    subimageListModuleSchemaNodes(module="<module-of-the-node>")
-   subimageGetNodesSchema(node_labels=["<TerminalLabel>"])
+   subimageGetNodesSchema(node_names=["<TerminalLabel>"])
    ```
    Note the relationship types and target labels.
 3. For each plausible relationship, run a small Cypher probe to confirm that real rows exist (see Cypher rules below). Examples of credible n+1 categories:
@@ -96,7 +96,7 @@ This is what the analyst mode adds: inspect the terminal node of a path and prob
    - **Data exfiltration**: from any compromised compute, reachable storage with sensitive data labels or public read.
    - **Cross-account / cross-tenant**: trust relationships, cross-account role assumes, federated identity bridges.
 4. Apply the **5-test checklist** below before reporting anything.
-5. Report each credible extension via `reportNeededImprovement` (format below). Increment a counter; mention it in the final output.
+5. Surface each credible extension in the output (format below). Increment a counter; mention it in the final output.
 
 ### Mode D: what-if scenario (overlay)
 
@@ -120,9 +120,9 @@ When running Cypher in Mode C (and any time you escalate to `subimageRunCypher`)
 
 If you are unsure of the schema, draft the query via `subimageAgentBuildQuery(user_question=...)` and execute it with `subimageRunCypher`. Do not write Cypher from intuition.
 
-## When to report a missing transition
+## When to surface a candidate extension
 
-Report via `reportNeededImprovement` only when **all five** are true:
+Include a candidate in the output only when **all five** are true:
 
 1. The source and target labels are supported by real rows in this tenant's graph (not just the schema).
 2. The relationship between them exists in the graph (a Cypher probe found at least one row).
@@ -130,11 +130,11 @@ Report via `reportNeededImprovement` only when **all five** are true:
 4. The step provides meaningful new impact, privilege, or reach (not just "another node of the same kind").
 5. The step is not obviously already modeled by an existing transition (check by walking a few existing paths between similar node types).
 
-If any one fails, do not report. State internally why and move on.
+If any one fails, do not surface it. State internally why and move on.
 
-### `reportNeededImprovement` format
+### Candidate extension format
 
-Fill the fields exactly:
+Render each candidate as a sub-block with these fields exactly:
 
 - **context**: `Attack path analysis: <user request, one sentence>`
 - **problem**: `Potential missing transition: <SourceLabel> can reach <TargetLabel> via <relationship>, enabling <impact>. Transition type: <lateral-movement | privilege-escalation | data-exfiltration | cross-account>. Evidence: <N> matches. Cypher pattern: <one-line MATCH>.`
@@ -179,8 +179,9 @@ After Mode C, append:
 ## n+1 extension hunt
 - probes run: <count>
 - credible extensions found: <count>
-- transitions reported via `reportNeededImprovement`: <count>
-- summary of each reported extension (one line each)
+- candidate extensions surfaced: <count>
+
+<for each surfaced candidate, render the five-field sub-block from "Candidate extension format" above>
 ```
 
 If Mode C found nothing credible, say so plainly: "No credible n+1 extension supported by graph evidence. The terminal node `<id>` does not currently sit next to anything that survives the 5-test checklist."
