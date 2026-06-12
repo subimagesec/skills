@@ -1,6 +1,6 @@
 ---
 name: improve-subimage-coverage
-description: Audit the current repo for cloud / SaaS providers that are NOT yet wired into SubImage, then check whether the SubImage compliance framework is enabled and surface its top actionable findings. Use when the user asks to "improve SubImage coverage", "what should I connect to SubImage", "audit SubImage coverage", "what's missing in my SubImage setup", or runs this on a recurring schedule against their IaC repo. Closes the loop between "I have IaC defining X" and "SubImage tells me what's wrong with X".
+description: Audit the current repo for cloud / SaaS providers that are NOT yet wired into SubImage, then list the security rules with findings and surface the top actionable ones grouped by tag. Use when the user asks to "improve SubImage coverage", "what should I connect to SubImage", "audit SubImage coverage", "what's missing in my SubImage setup", or runs this on a recurring schedule against their IaC repo. Closes the loop between "I have IaC defining X" and "SubImage tells me what's wrong with X".
 ---
 
 # Improve SubImage coverage
@@ -11,7 +11,7 @@ Three passes:
 
 1. **Detect** which providers the user's current repo and local environment touch (Terraform providers, CLI configs, git remotes).
 2. **Cross-reference** with `subimageListModules` to compute coverage gaps and link them to the right setup skill.
-3. **Inspect** the SubImage compliance framework state: if enabled, surface its top actionable findings, prioritizing those whose resources come from a recently-detected or newly-enabled provider.
+3. **Inspect** the security rules that have findings: list them directly, group by tag, and surface the top actionable ones, prioritizing tags whose resources come from a recently-detected or newly-enabled provider.
 
 This is the bridge between IaC reality and SubImage observability. Most other skills assume the wiring is already done; this one finds the wiring that is missing and the findings that prove it would have been worth doing.
 
@@ -27,7 +27,7 @@ This is the bridge between IaC reality and SubImage observability. Most other sk
 ## Prerequisites
 
 - The skill runs against the **current working directory**. Run it from the root of the IaC or scripts repo to maximize signal.
-- Uses `subimageListModules`, `subimageListFrameworks`, `subimageListRules`, `subimageGetRuleFindings`.
+- Uses `subimageListModules`, `subimageListRules`, `subimageGetRuleFindings`.
 
 ## Workflow
 
@@ -64,7 +64,7 @@ Normalize each Terraform provider name to the matching SubImage module slug **be
 | `sentinelone` | `sentinelone` |
 | `crowdstrike` | `crowdstrike` |
 
-After mapping, `detected_modules` is the **set of SubImage module slugs** the repo touches. Drop entries whose mapped slug is `none` — they cannot be a coverage gap by definition.
+After mapping, `detected_modules` is the **set of SubImage module slugs** the repo touches. Drop entries whose mapped slug is `none`: they cannot be a coverage gap by definition.
 
 **CLI / environment signals** (weaker, but useful when no IaC):
 
@@ -105,37 +105,31 @@ For each gap, classify:
 
 Also note the inverse: modules enabled in SubImage that you do NOT see in the repo. Usually fine (they may be wired elsewhere), but worth flagging if it is something the user clearly does not own anymore.
 
-### 4. Check the SubImage compliance framework
+### 4. List the rules directly
 
 ```
-subimageListFrameworks()
+subimageListRules()
 ```
 
-Find the entry whose slug or display name is `subimage` (or "SubImage"). Three cases:
+This returns every rule with `id`, `name`, `description`, `tags`, `findings_count`, `has_findings`, and `disabled`. There is **no** `framework` parameter; do not pass one. Findings live on rules, and each rule carries its own `tags` (theme/category) and, via `subimageGetRuleFindings`, its compliance `frameworks`. Tags are the grouping axis here, not frameworks.
 
-- **Not present**: the framework is not available for this tenant version. Skip step 5.
-- **Disabled**: tell the user "The SubImage framework exists but is not enabled. Enable it at **Settings → Frameworks → SubImage** to get the curated rule set on top of CIS." Skip step 5.
-- **Enabled**: continue to step 5.
+Keep only rows where `has_findings` is true (`findings_count > 0`) and `disabled` is false. If that set is empty, the rule set is not producing findings yet (modules may still be syncing, or no rules are enabled): say so and skip step 5.
 
-### 5. Surface top actionable findings (only if framework enabled)
+### 5. Group by tag and surface the top findings
 
-```
-subimageListRules(framework="<subimage-framework-slug>")
-```
+Group the kept rules by `tags` (a rule with multiple tags appears in each of its tag groups). Rank tag groups, then rules within them, by:
 
-Filter to rules with `findingsCount > 0`. Take the top 5 by:
+1. Whether the tag group ties to a slug in `detected_modules` OR a module just promoted out of the gap list (relevance to this repo wins).
+2. Severity (critical → high → medium → low).
+3. Findings count (desc).
 
-1. Severity (critical → high → medium → low)
-2. Recently-touched modules (rules whose resource type maps to a slug in `detected_modules` OR a module just promoted out of the gap list)
-3. Findings count (desc)
-
-For each top rule:
+Take the top 5 rules overall. For each, call:
 
 ```
 subimageGetRuleFindings(rule_id="<rule-id>")
 ```
 
-Capture: a few representative resources (with entity tags), severity, account or project distribution.
+Capture: a few representative resources (with entity tags), severity, account or project distribution, and (optional context) the `frameworks` the rule belongs to.
 
 ### 6. Output
 
@@ -156,16 +150,15 @@ If empty: "No coverage gaps detected. Every provider this repo touches is enable
 
 If empty: omit this section.
 
-## SubImage framework status
-- Status: <enabled / disabled / not available>
-- <one-line action if disabled or missing>
-
-## Top actionable findings (SubImage framework, if enabled)
+## Top actionable findings (by tag)
+### <tag group, e.g. "iam" / "exposure" / "encryption">
 1. <rule title>: <count> findings, severity <X>
    - hot resources: [[entity:<Label>:<id>|<short>]] (+<rest>)
    - tied to: <provider> *(newly detected: yes/no)*
    - next step: <one line>
 2. ...
+
+If no rules have findings: "No rules are producing findings yet. Modules may still be syncing, or no rules are enabled."
 
 ## Recommended actions (ranked)
 1. <action with the highest expected leverage, usually closing the most impactful gap>
@@ -187,9 +180,10 @@ Do not auto-load. The user opts in.
 - Generating a wall of findings. Top 5 is the budget; deeper goes into `subimage-mcp:triage-new-findings`.
 - Pivoting into actually configuring a module from this skill. Hand off.
 - Using Cypher to invent coverage data. Use `subimageListModules` directly; it is the canonical source.
+- Passing a `framework=` argument to `subimageListRules`. The tool does not accept one; list rules directly and group by `tags`.
 
 ## References
 
-- Tool guide (always loaded by `subimageReadMe`): Domain 5 "Compliance & Security Findings", Domain 7 "Cloud CLI Command Generation" (for verification).
+- Tool guide (always loaded by `subimageReadMe`): Domain 5 "Compliance & Security Findings", Domain 7 "Cloud CLI Command Generation" (for verification). Note `subimageListRules` returns per-rule `tags` and takes no `framework` argument.
 - Setup skills: `subimage-setup:connect-aws`, `subimage-setup:connect-gcp`, `subimage-setup:connect-azure`, `subimage-setup:connect-github`, `subimage-setup:connect-kubernetes-outpost`.
 - Findings triage follow-up: `subimage-mcp:triage-new-findings`.

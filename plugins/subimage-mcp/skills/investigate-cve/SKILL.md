@@ -20,7 +20,7 @@ Given a CVE id, pulls SubImage's full picture for it: severity, KEV status, affe
 
 ## Prerequisites
 
-This skill uses `subimageGetVulnerabilityDetails`, `subimageGetFixDetails`, and (optionally) `subimageAgentBuildQuery` + `subimageRunCypher`. The pivot at the end uses `subimageGetAttackPathsFromAsset`.
+This skill uses `subimageGetVulnerabilityDetails`, `subimageGetPackageDetails`, and (optionally) `subimageAgentBuildQuery` + `subimageRunCypher`. The optional internet-enrichment step uses `WebSearch` (and `WebFetch` for a specific advisory URL). The pivot at the end uses `subimageGetAttackPathsFromAsset`.
 
 ## Required inputs
 
@@ -36,23 +36,32 @@ This skill uses `subimageGetVulnerabilityDetails`, `subimageGetFixDetails`, and 
 subimageGetVulnerabilityDetails(cve_id="<CVE_ID>")
 ```
 
-This returns: severity, CVSS, KEV status, description, affected packages, affected resources (containers, images, compute instances), discovered date, fix availability flags.
+This returns: severity, CVSS, `cisa_known_exploit` (KEV) and `kev_date`, `epss_score` / `epss_percentile`, `published_date`, description, `affected_packages` (each with name, version, type, and the available fix version), and `affected_resources` (containers running vulnerable images).
 
 If the response is empty or 404, the CVE is not present in this tenant's data. Stop and tell the user: "SubImage has no record of `<CVE_ID>` in your environment. Either it does not affect any synced asset, or vulnerability scanning is not enabled for the relevant module. Run `subimage-mcp:improve-subimage-coverage` to check coverage."
 
-### 2. If actionable, fetch fix details
+### 2. Read fixability from the record
 
-For each affected package with a fix available, call:
+Fix data is already in step 1's `affected_packages`: each entry carries the available fix version (or none). Derive, per package: target fix version, affected containers (from `affected_resources`), and whether the fix is a package bump or an image rebuild.
 
-```
-subimageGetFixDetails(package="<package-name>")
-```
-
-Capture: target version, affected containers, whether the fix is a rebuild (image base change) or a package bump.
+Call `subimageGetPackageDetails(package_name="<package-name>")` **only** when you need deeper per-package detail the CVE record does not carry (transitive dependents, other CVEs on the same package, full version history). The argument is `package_name`, not `package`. There is no `subimageGetFixDetails` tool; do not call one.
 
 If nothing is fixable, note that explicitly in the summary; the next action shifts from "patch" to "monitor / mitigate / accept".
 
-### 3. Optional graph follow-up
+### 3. Optional internet enrichment (agent judgment)
+
+SubImage tells you where the CVE lands; the public record tells you how dangerous it is in the wild. Reach for `WebSearch` **only when it would change the recommendation**, not for every CVE. Good triggers:
+
+- The CVE is KEV or critical, and the user is deciding patch priority.
+- No fix is available (need mitigations / workarounds from the advisory).
+- The CVE is very recent (exploit/PoC landscape still moving).
+- The user explicitly asks about real-world exploitability, PoCs, or active exploitation.
+
+When triggered, run at most ~1-3 focused searches (e.g. the NVD/vendor advisory, public PoC / exploit availability, active-exploitation reports). Use `WebFetch` to read a specific advisory URL the search surfaces. Fold the result into the summary as a short **External context** subsection (exploit maturity, notable advisories, mitigations) with source links.
+
+When not triggered, skip it and instead offer it as a one-line follow-up ("Want me to check public exploit / PoC availability for this CVE?"). Never let web text override SubImage's environment-specific data: the graph is authoritative for *what you run*; the web is context for *how bad it is*.
+
+### 4. Optional graph follow-up
 
 Use Cypher only when:
 
@@ -67,14 +76,14 @@ subimageRunCypher(query="<query returned above>")
 
 Skip this step otherwise. The structured tools are faster and citable.
 
-### 4. Summarize
+### 5. Summarize
 
 Output in this exact structure. Keep it scannable.
 
 ```
 # <CVE_ID>
 
-**Severity**: <critical/high/...>  •  **CVSS**: <score>  •  **KEV**: <yes/no>
+**Severity**: <critical/high/...>  •  **CVSS**: <score>  •  **KEV**: <yes/no>  •  **EPSS**: <score> (<percentile> pct)  •  **Published**: <date>
 
 ## What it is
 <one-sentence description from the CVE record>
@@ -90,9 +99,15 @@ Output in this exact structure. Keep it scannable.
 - **Rebuild required**: <count> images need a base image bump
 - **No fix yet**: <count> packages, mitigation only
 
+## External context (only if step 3 ran)
+- exploit maturity: <PoC / weaponized / none known> (<source link>)
+- mitigations / workarounds: <one line> (<source link>)
+
 ## Recommended next action
 <one line: patch this image first, bump this package across N services, monitor and revisit, or accept and document>
 ```
+
+Omit `EPSS` from the header line if the record has no EPSS data (`epss_score` is null). Omit the **External context** section entirely when step 3 did not run.
 
 If KEV is `yes`, prepend a single-line callout above the title:
 
@@ -100,7 +115,7 @@ If KEV is `yes`, prepend a single-line callout above the title:
 ⚠️ KEV: actively exploited in the wild; prioritize over non-KEV criticals.
 ```
 
-### 5. Offer the pivot to attack-path exploration
+### 6. Offer the pivot to attack-path exploration
 
 This is the most common follow-up question. Do NOT auto-pivot. End the response with:
 
@@ -124,8 +139,11 @@ This converts a static CVE finding into a live exploitability question, which is
 - Asking the user to run `subimageRunCypher` themselves. Run it, summarize the result.
 - Auto-pivoting to attack paths without confirmation. The user should opt in.
 - Listing every affected resource. Top 5 + a count is enough.
+- Web-searching every CVE reflexively. The internet step is for KEV/critical/no-fix/exploitability questions; otherwise offer it, don't run it.
+- Letting public web text override SubImage data about what you actually run. The graph is authoritative for your environment.
 
 ## References
 
 - Tool guide (always loaded by `subimageReadMe`): Domain 3 "Vulnerability Management" and Domain 4 "Attack Path Analysis".
 - Companion skill for the pivot: `subimage-mcp:review-attack-path`.
+- Internet enrichment: `WebSearch` / `WebFetch` (NVD, vendor advisories, public PoC trackers). Use sparingly per the step-3 triggers.

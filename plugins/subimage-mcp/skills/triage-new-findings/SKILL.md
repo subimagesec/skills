@@ -1,13 +1,13 @@
 ---
 name: triage-new-findings
-description: Triage SubImage security findings against the enabled compliance frameworks, group them by theme, and recommend the next investigation steps. Use when the user asks to "triage findings", "what's new in SubImage today", "summarize my open findings", "any urgent findings", or wants a daily/weekly findings digest. Pulls framework status first, then per-framework rules and findings, and proposes the highest-priority items per framework.
+description: Triage SubImage security findings by listing the rules that have findings, grouping them by tag/theme, and recommending the next investigation steps. Use when the user asks to "triage findings", "what's new in SubImage today", "summarize my open findings", "any urgent findings", or wants a daily/weekly findings digest. Lists rules directly, groups by tag, and proposes the highest-priority items per theme (surfacing compliance frameworks as context).
 ---
 
 # Triage new findings
 
 ## What this does
 
-Walks SubImage's compliance frameworks → rules → findings hierarchy to produce a triaged digest the user can act on. Always grounds findings in the framework that flagged them so the user understands which control set is unhappy, not just "rule X has 12 findings".
+Lists SubImage's security rules, groups the ones with findings by tag (theme/category), and produces a triaged digest the user can act on. Surfaces the compliance frameworks a rule belongs to as context where useful, so the user understands which control set is unhappy, not just "rule X has 12 findings".
 
 ## When to use
 
@@ -21,34 +21,34 @@ Walks SubImage's compliance frameworks → rules → findings hierarchy to produ
 
 ## Prerequisites
 
-The `subimageReadMe` global tool guide is available. This skill assumes the role-based tools (`subimageListFrameworks`, `subimageListRules`, `subimageGetRuleFindings`, optionally `subimageSendNotification` and `subimageCreateTicket`) are reachable.
+The `subimageReadMe` global tool guide is available. This skill assumes the role-based tools (`subimageListRules`, `subimageGetRuleFindings`, optionally `subimageSendNotification` and `subimageCreateTicket`) are reachable.
 
 ## Optional inputs (ask only if relevant)
 
 | Value | When to ask |
 |---|---|
-| Framework filter | If the user mentions one explicitly ("CIS AWS", "SubImage", "SOC 2"), scope to it. Otherwise pull all enabled frameworks and break down by framework. |
+| Tag / theme filter | If the user mentions one explicitly ("IAM", "exposure", "encryption"), scope to rules carrying that tag. If they name a framework ("CIS AWS", "SubImage", "SOC 2"), keep only rules whose `frameworks` (from `subimageGetRuleFindings`) include it. Otherwise break down by tag across all rules. |
 | Time window | If the user says "this week", "since yesterday": apply that window to `lastSeenAt` / `firstSeenAt`. Default: open and recently updated. |
 | Severity threshold | If the user says "only criticals": filter `severity in [critical, high]`. Default: include everything. |
 | Notification target | Only if the user explicitly asks to ship the digest somewhere (Slack channel, email, ticket). Never send unprompted. |
 
 ## Workflow
 
-### 1. Frameworks first
+### 1. List the rules directly
 
-Call `subimageListFrameworks`. Identify which are enabled. Note their slugs and display names. Common frameworks: `cis-aws`, `cis-gcp`, `cis-azure`, `subimage`, plus any custom ones.
+Call `subimageListRules()`. It returns every rule with `id`, `name`, `description`, `tags`, `findings_count`, `has_findings`, and `disabled`. There is **no** `framework` parameter; do not pass one. Keep rows where `has_findings` is true and `disabled` is false.
 
-If zero enabled, stop and tell the user: "No compliance frameworks are enabled. Enable one in **Settings → Frameworks**, or run `subimage-mcp:improve-subimage-coverage` to suggest which ones make sense given the connected modules."
+If none have findings, stop and tell the user: "No rules are producing findings right now. Modules may still be syncing, or no rules are enabled. Run `subimage-mcp:improve-subimage-coverage` to check coverage."
 
-### 2. List rules per framework
+### 2. Group by tag
 
-Call `subimageListRules`. Group by framework. For each framework, keep rules where `findingsCount > 0`. Sort by:
+Group the kept rules by `tags` (a rule with multiple tags appears in each of its tag groups). Within each group sort by:
 
 1. Severity (critical, high, medium, low)
 2. Findings count (desc)
 3. Most recently updated
 
-Take the top 5 to 10 per framework. Going wider produces noise; going narrower hides cross-framework patterns.
+Take the top 5 to 10 per tag group. Going wider produces noise; going narrower hides cross-cutting patterns.
 
 ### 3. Pull findings for the top rules
 
@@ -56,6 +56,7 @@ For each top rule, call `subimageGetRuleFindings(rule_id)`. Collect:
 
 - resource type / cloud account / region distribution
 - a few representative resource ids (use entity tags so the UI links to them)
+- the `frameworks` the rule belongs to (optional context for the digest)
 - whether any are already accepted/dismissed (skip those in the digest)
 
 If a rule has hundreds of findings, sample the most recent and mention the total count.
@@ -65,9 +66,9 @@ If a rule has hundreds of findings, sample the most recent and mention the total
 Look across the collected findings for cross-rule themes. Examples that often emerge:
 
 - **Misconfiguration cluster**: one account or one team owns most of the offenders → propose ownership ping
-- **Drift since last week**: rules where `findingsCount` jumped → propose investigating the change
-- **Compliance regression**: a framework with a worsening pass rate vs. its history → propose which rule(s) caused it
-- **Cross-framework overlap**: a rule appears in `cis-aws` and `subimage` → only count once in the prioritized list
+- **Drift since last week**: rules where `findings_count` jumped → propose investigating the change
+- **Tag concentration**: one tag group (e.g. `iam`, `exposure`) holds most of the high-severity findings → propose tackling that theme first
+- **Cross-framework overlap**: a rule's `frameworks` include both `cis-aws` and `subimage` → only count it once in the prioritized list
 
 ### 5. Output
 
@@ -76,20 +77,21 @@ Produce a digest in this exact structure:
 ```
 # SubImage findings triage: <date>
 
-## Frameworks at a glance
-- <framework name>: <pass-rate or finding-count summary>, <delta if known>
+## At a glance
+- <tag group>: <rule count> rules, <finding count> findings, <delta if known>
 - ...
 
-## Top issues per framework
+## Top issues by tag
 
-### <framework 1>
+### <tag group 1, e.g. "iam">
 1. <rule title>: <count> findings, severity <X>
    - hot resources: [[entity:<Label>:<id>|<short-name>]], [[entity:<Label>:<id>|<short-name>]] (+<rest>)
+   - frameworks: <e.g. cis-aws, subimage> (if useful)
    - why it matters: <one line>
    - next step: <one line>
 2. ...
 
-### <framework 2>
+### <tag group 2>
 ...
 
 ## Cross-cutting themes
@@ -113,12 +115,13 @@ Never auto-send without explicit confirmation. The digest is most useful as a ch
 
 ## Anti-patterns
 
-- Listing all rules with `findingsCount > 0` regardless of severity. Turns the digest into a CSV.
+- Listing all rules with `findings_count > 0` regardless of severity. Turns the digest into a CSV.
+- Passing a `framework=` argument to `subimageListRules`. The tool does not accept one; list rules directly and group by `tags`.
 - Reformatting the raw `subimageGetRuleFindings` output as a Markdown table. The system prompt in chat already forbids this for tool-derived data, and the markdown table produces a wall of text.
 - Speculating about why a finding exists without a Cypher query to back it up. Stay grounded in tool output.
 - Quoting the same resource multiple times in the same theme. Tag once, then count "+N more".
 
 ## References
 
-- Tool guide (always loaded by `subimageReadMe`): see Domain 5 "Compliance & Security Findings" and Domain 6 "Ticket Management".
+- Tool guide (always loaded by `subimageReadMe`): see Domain 5 "Compliance & Security Findings" and Domain 6 "Ticket Management". Note `subimageListRules` returns per-rule `tags` and takes no `framework` argument.
 - Scheduled agents (where this skill is most useful as a recurring prompt): https://app.subimage.io/docs/agents/scheduled_agents

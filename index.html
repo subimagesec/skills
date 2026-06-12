@@ -205,8 +205,8 @@ claude plugin install subimage-mcp@subimage</code></pre>
 							><code>triage-new-findings</code></a
 						>
 						<span class="desc"
-							>Frameworks-first findings digest with grouped themes and recommended
-							next steps.</span
+							>Findings digest grouped by tag/theme (rules listed directly), with
+							recommended next steps.</span
 						>
 					</li>
 					<li>
@@ -214,8 +214,36 @@ claude plugin install subimage-mcp@subimage</code></pre>
 							><code>investigate-cve</code></a
 						>
 						<span class="desc"
-							>Full impact and fixability for a specific CVE, with an opt-in
-							pivot to attack-path exploration.</span
+							>Full impact, EPSS/KEV context, and fixability for a specific CVE,
+							with opt-in internet enrichment and a pivot to attack-path
+							exploration.</span
+						>
+					</li>
+					<li>
+						<a href="/plugins/subimage-mcp/skills/investigate-iam/SKILL.md"
+							><code>investigate-iam</code></a
+						>
+						<span class="desc"
+							>IAM privilege audit: admin-equivalent identities, assume-role and
+							cross-account trust chains, PermissionSet effective permissions.</span
+						>
+					</li>
+					<li>
+						<a href="/plugins/subimage-mcp/skills/investigate-container/SKILL.md"
+							><code>investigate-container</code></a
+						>
+						<span class="desc"
+							>Image provenance, Kubernetes/EKS cluster exposure, and EKS
+							node-count reconciliation (three modes).</span
+						>
+					</li>
+					<li>
+						<a href="/plugins/subimage-mcp/skills/investigate-ip/SKILL.md"
+							><code>investigate-ip</code></a
+						>
+						<span class="desc"
+							>Resolve IP/domain ownership across cloud resources, trace the DNS
+							chain, and attribute public IPs (ASN/geo/VPN-proxy-Tor).</span
 						>
 					</li>
 					<li>
@@ -234,7 +262,8 @@ claude plugin install subimage-mcp@subimage</code></pre>
 						>
 						<span class="desc"
 							>Scan the current repo for providers, cross-reference with
-							subimageListModules, surface top actionable findings.</span
+							subimageListModules, then list rules with findings and surface the
+							top actionable ones grouped by tag.</span
 						>
 					</li>
 					<li>
