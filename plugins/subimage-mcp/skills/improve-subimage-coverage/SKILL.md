@@ -117,19 +117,18 @@ Keep only rows where `has_findings` is true (`findings_count > 0`) and `disabled
 
 ### 5. Group by tag and surface the top findings
 
-Group the kept rules by `tags` (a rule with multiple tags appears in each of its tag groups). Rank tag groups, then rules within them, by:
+Group the kept rules by `tags` (a rule with multiple tags appears in each of its tag groups). `subimageListRules()` does not return severity, so do the initial ranking on the fields it does return:
 
 1. Whether the tag group ties to a slug in `detected_modules` OR a module just promoted out of the gap list (relevance to this repo wins).
-2. Severity (critical → high → medium → low).
-3. Findings count (desc).
+2. Findings count (desc).
 
-Take the top 5 rules overall. For each, call:
+Take a candidate top ~8 rules, then call `subimageGetRuleFindings` on each:
 
 ```
 subimageGetRuleFindings(rule_id="<rule-id>")
 ```
 
-Capture: a few representative resources (with entity tags), severity, account or project distribution, and (optional context) the `frameworks` the rule belongs to.
+Capture: severity, a few representative resources (with entity tags), account or project distribution, and (optional context) the `frameworks` the rule belongs to. Now that severity is available, re-rank by severity (critical → high → medium → low), then findings count, and keep the top 5.
 
 ### 6. Output
 

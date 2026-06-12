@@ -116,6 +116,7 @@ RETURN c.name AS cluster, c.id AS cluster_id,
        eks.name AS eks_cluster, eks.region AS region,
        eks.exposed_internet AS eks_api_exposed,
        eks.endpoint_public_access AS endpoint_public_access, eks.version AS version
+LIMIT 5
 ```
 
 ### Namespaces
@@ -123,6 +124,7 @@ RETURN c.name AS cluster, c.id AS cluster_id,
 ```cypher
 MATCH (c:KubernetesCluster)-[:RESOURCE]->(ns:KubernetesNamespace) WHERE c.name = $cluster_name
 RETURN ns.name AS namespace, ns.id AS namespace_id ORDER BY ns.name
+LIMIT 500
 ```
 
 ### Internet-exposed services
@@ -137,6 +139,7 @@ RETURN svc.name AS service, svc.namespace AS namespace, svc.type AS service_type
        svc.exposed_internet AS exposed_internet, svc.exposed_internet_type AS exposure_type,
        lb.dnsname AS aws_lb_dns, lb.scheme AS lb_scheme
 ORDER BY svc.namespace, svc.name
+LIMIT 500
 ```
 
 ### Ingress resources
@@ -147,6 +150,7 @@ RETURN ing.name AS ingress, ing.namespace AS namespace,
        ing.ingress_class_name AS ingress_class, ing.host_names AS hosts,
        ing.load_balancer_dns_names AS lb_dns_names, ing.ingress_group_name AS alb_group
 ORDER BY ing.namespace, ing.name
+LIMIT 500
 ```
 
 ### Backing nodes with public IPs (running EC2 only)
@@ -161,9 +165,10 @@ WHERE ec2.state = 'running' AND ec2.publicipaddress IS NOT NULL
 RETURN ec2.instanceid AS ec2_instance, ec2.publicipaddress AS public_ip,
        ec2.exposed_internet AS ec2_exposed, ec2.region AS region
 ORDER BY ec2.instanceid
+LIMIT 200
 ```
 
-For Kubernetes node inventory (separately, no EC2 attribution): `MATCH (c:KubernetesCluster)-[:RESOURCE]->(n:KubernetesNode) WHERE c.name = $cluster_name RETURN n.name, n.id ORDER BY n.name`.
+For Kubernetes node inventory (separately, no EC2 attribution): `MATCH (c:KubernetesCluster)-[:RESOURCE]->(n:KubernetesNode) WHERE c.name = $cluster_name RETURN n.name, n.id ORDER BY n.name LIMIT 500`.
 
 ### All exposed_internet=true objects
 
@@ -174,6 +179,7 @@ RETURN labels(obj) AS node_labels, obj.name AS name,
        coalesce(obj.namespace, 'cluster-scoped') AS namespace,
        obj.exposed_internet_type AS exposure_type, obj.id AS id
 ORDER BY namespace, name
+LIMIT 500
 ```
 
 ## Node Reconciliation (Mode 3)
@@ -200,6 +206,7 @@ RETURN a.name AS aws_account, a.id AS aws_account_id,
   END AS anomaly_level,
   stale_instances
 ORDER BY stale_nodes DESC, a.name, eks.name
+LIMIT 200
 ```
 
 Correct node-count pattern for any "how many nodes" question:
@@ -209,4 +216,5 @@ MATCH (ec2:EC2Instance)-[:MEMBER_OF_EKS_CLUSTER]->(eks:EKSCluster)
 WHERE ec2.state = 'running'
 RETURN eks.name AS cluster, count(ec2) AS node_count
 ORDER BY eks.name
+LIMIT 200
 ```

@@ -129,10 +129,12 @@ LIMIT 100
 MATCH (a:AWSAccount)-[:RESOURCE]->(l:LoadBalancer) WHERE l.dnsname = $value
 RETURN 'LoadBalancer' AS resource_type, l.id AS resource_id, l.name AS name,
        a.name AS account, l.region AS region, 'dnsname' AS matched_field
+LIMIT 100
 UNION ALL
 MATCH (a:AWSAccount)-[:RESOURCE]->(l:LoadBalancerV2) WHERE l.dnsname = $value
 RETURN 'LoadBalancerV2' AS resource_type, l.id AS resource_id, l.name AS name,
        a.name AS account, l.region AS region, 'dnsname' AS matched_field
+LIMIT 100
 ```
 
 ### GCP DNS record sets: `data` is a LIST (use `ANY`)

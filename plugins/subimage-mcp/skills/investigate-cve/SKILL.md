@@ -89,8 +89,7 @@ Output in this exact structure. Keep it scannable.
 <one-sentence description from the CVE record>
 
 ## Where it lands in your environment
-- <count> containers across <count> images
-- <count> compute instances
+- <count> containers (ECS/Kubernetes) across <count> images
 - packages affected: <pkg1>, <pkg2>, ...
 - top exposed resources: [[entity:Container:<id>|<name>]], [[entity:Image:<id>|<name>]]
 
