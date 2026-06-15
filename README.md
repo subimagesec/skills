@@ -29,6 +29,9 @@ After install, skills are namespaced under their plugin:
 
 /subimage-mcp:triage-new-findings
 /subimage-mcp:investigate-cve
+/subimage-mcp:investigate-iam
+/subimage-mcp:investigate-container
+/subimage-mcp:investigate-ip
 /subimage-mcp:review-attack-path
 /subimage-mcp:improve-subimage-coverage
 /subimage-mcp:build-cypher-query
@@ -63,6 +66,9 @@ plugins/
     skills/
       triage-new-findings/SKILL.md
       investigate-cve/SKILL.md
+      investigate-iam/SKILL.md
+      investigate-container/SKILL.md
+      investigate-ip/SKILL.md
       review-attack-path/SKILL.md
       improve-subimage-coverage/SKILL.md
       build-cypher-query/SKILL.md

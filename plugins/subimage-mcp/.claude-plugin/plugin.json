@@ -1,6 +1,6 @@
 {
 	"name": "subimage-mcp",
-	"description": "Operator workflows over the SubImage MCP server: triage findings, investigate CVEs, review attack paths, audit SubImage coverage, build Cypher queries, and author tenant-local custom rules.",
+	"description": "Operator workflows over the SubImage MCP server: triage findings, investigate CVEs, audit IAM privilege, investigate containers and clusters, resolve IP/domain ownership, review attack paths, audit SubImage coverage, build Cypher queries, and author tenant-local custom rules.",
 	"version": "0.1.0",
 	"author": {
 		"name": "SubImage",
