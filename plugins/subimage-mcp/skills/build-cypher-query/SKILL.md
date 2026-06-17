@@ -1,19 +1,29 @@
 ---
 name: build-cypher-query
-description: Build and run a Cypher query against the SubImage Neo4j graph. Use when answering a question requires graph traversal (cross-resource, identity, attack-surface, ownership) and no dedicated MCP tool fits.
+description: Build and run a Cypher query against the SubImage Neo4j graph only when the user request requires graph traversal, relationships, identity/access, reachability, ownership, blast radius, root cause, or absence validation, and no dedicated MCP tool can answer directly.
 ---
 
 # Build a Cypher query
 
 Produce a correct Cypher query that answers the user's question, in as few tool calls as possible, using only tools the SubImage MCP server actually exposes.
 
+## Hard entry gate
+
+- Before any schema discovery, model-query lookup, or Cypher execution, check whether a dedicated SubImage MCP tool can answer the user's exact question. If yes, do not use this skill.
+- If there is already a non-empty result from Issues, Vulnerabilities, Inventory, Compliance, or Attack Paths that directly answers the question: stop and answer from that result. Do not use this skill to validate, enrich, double-check, or improve confidence.
+- "More graph detail might exist", "validate with Cypher", and "dedicated tool result was non-empty" are not sufficient reasons. This skill is blocked unless the user explicitly asks for graph relationships, root cause, blast radius, reachability, ownership, permissions, or absence validation.
+
 ## When to use
 
-✅ The answer requires joining nodes the user can name informally (services, accounts, users, vulnerabilities, attack paths).
-✅ The user pastes a question like "which EC2 instances have public IPs and an IAM role that can assume admin?" and wants the underlying data.
-✅ You already tried `subimageListModules` / `subimageGetVulnerabilityDetails` etc. and the answer needs more graph context.
+✅ The answer requires graph traversal, joins, relationships, identity/access, reachability, blast radius, ownership, root cause, transitive reasoning, or absence validation.
+✅ A graph-shaped question like "which EC2 instances have public IPs and an IAM role that can assume admin?"
+✅ A dedicated MCP tool returned **empty** results and absence must be validated.
+✅ A dedicated MCP tool returned non-empty results but is missing required fields for the user's exact question.
+✅ The answer requires joining graph entities across domains and no dedicated MCP tool can answer directly.
 
-❌ A dedicated MCP tool answers the question directly (vulnerability lookup, framework findings, attack-path enumeration). Use the dedicated tool: it is faster, cached, and renders better in the UI.
+❌ A dedicated MCP tool answers the question directly.
+❌ Remediation, prioritization, action items, vulnerability lookup, package fixability, framework findings, inventory listing, or attack-path enumeration where the matching dedicated tool returned non-empty results.
+❌ Only trying to validate, enrich, or double-check a sufficient dedicated-tool result.
 ❌ The user has a known-good Cypher query in hand. Skip this skill and run `subimageRunCypher` directly.
 
 ## Public MCP tools used
@@ -63,6 +73,8 @@ Skip this step entirely if step 2 left no ambiguity.
 
 ### Step 4 — Execute and cache
 
+Do not run the final query if a dedicated non-Cypher tool has already returned a sufficient non-empty answer during this turn.
+
 1. Run the final query with `subimageRunCypher(query=<final>)`. It streams to the UI as an interactive table; summarize the rows for the user, do not reprint the table.
 2. If you authored the query from scratch (no `searchModelQueries` hit) and execution returned meaningful rows, call `saveModelQuery` with a clear description and the labels involved so future questions of the same shape can skip the authoring step. Do not cache a query that only passed syntax: cache after the result is confirmed useful.
 
@@ -99,6 +111,7 @@ Simplify before running:
 ## Execution rules
 
 - Each `subimageRunCypher` call must contain exactly one executable Cypher statement.
+- Never include `//` comments in the query string passed to `subimageRunCypher`. Keep any explanatory notes in your prose, not in the query.
 - Do not run a redundant `COUNT(*)` after the final query "to verify it parses". `subimageRunCypher` validates syntax on the way in.
 - If you cannot build a valid query (missing schema, ambiguous question, no matching data after one probe), do not run a speculative query. Explain to the user what is missing and what they could clarify.
 
