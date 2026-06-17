@@ -1,6 +1,6 @@
 ---
 name: investigate-iam
-description: Audit IAM privilege in SubImage end-to-end: enumerate admin-equivalent identities, map assume-role and cross-account trust chains, and resolve PermissionSet effective permissions. Use when the user asks "who has admin access", "show privilege escalation paths", "audit IAM permissions", "what can assume this role", "find cross-account trust", or scopes the question to a specific AWS account or role.
+description: 'Audit IAM privilege in SubImage end-to-end: enumerate admin-equivalent identities, map assume-role and cross-account trust chains, and resolve PermissionSet effective permissions. Use when the user asks "who has admin access", "show privilege escalation paths", "audit IAM permissions", "what can assume this role", "find cross-account trust", or scopes the question to a specific AWS account or role.'
 ---
 
 # Investigate IAM privilege

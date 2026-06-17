@@ -1,0 +1,15 @@
+name: validate-skills
+on: [pull_request]
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9f698171ed81b15d1823a05fc7211befd50c8ae0 # v6.0.3
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.13"
+      # Hash-pinned lockfile; regenerate on bump with:
+      #   uv pip compile --generate-hashes (input: pydantic-ai-skills==<ver>)
+      # Keep <ver> in lockstep with the version SubImage embeds (subimage-backend uv.lock).
+      - run: pip install --require-hashes -r scripts/requirements.txt
+      - run: python scripts/validate_skills.py

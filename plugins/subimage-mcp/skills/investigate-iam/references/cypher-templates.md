@@ -150,10 +150,10 @@ LIMIT 200
 
 When the user provides a 12-digit account id, scope each query to it.
 
-For queries that already match an `AWSAccount` node, filter on **that query's** account alias (the cross-account-trust query binds `a` and `a2`; the PermissionSet queries bind `acc`):
+For queries that already match an `AWSAccount` node, filter on **that query's** account alias. Use the alias the target query actually binds (the cross-account-trust query binds `a` and `a2`; the PermissionSet queries bind `acc`) and combine with any existing `WHERE` using `AND`:
 
 ```cypher
-WHERE acc.id = '<account-id>'   // use the alias this query actually binds (acc, a, ...); combine with existing WHERE using AND
+WHERE acc.id = '<account-id>'
 ```
 
 For queries without an explicit account node, lead with:
