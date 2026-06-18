@@ -30,13 +30,15 @@ Then run `/plugins`, select **SubImage Skills**, and install `subimage-setup` an
 
 ### Cursor
 
-Open **Cursor Settings** -> **Rules**, add a **Remote Rule (Github)**, and enter:
+Open **Preferences** -> **Cursor Settings** -> **Rules, Skills, Subagents**, then choose **New** -> **Import from GitHub/GitLab** and enter:
 
 ```text
 https://github.com/subimagesec/skills
 ```
 
 Cursor imports the repo's Agent Skills and lists them under **Agent Decides**.
+
+No `.mdc` file is required. Cursor Agent Skills use `SKILL.md`; `.mdc` files are for Cursor rules.
 
 ### Other Agent Skills clients
 

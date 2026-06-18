@@ -22,7 +22,7 @@ Then run `/plugins`, select **SubImage Skills**, and install `subimage-setup`.
 
 ### Cursor
 
-Open **Cursor Settings** -> **Rules**, add a **Remote Rule (Github)**, and enter `https://github.com/subimagesec/skills`.
+Open **Preferences** -> **Cursor Settings** -> **Rules, Skills, Subagents**, then choose **New** -> **Import from GitHub/GitLab** and enter `https://github.com/subimagesec/skills`.
 
 ## Skills
 
