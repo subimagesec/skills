@@ -1,6 +1,6 @@
 # SubImage skills
 
-Claude Code marketplace for [SubImage](https://subimage.io), the cloud-native security platform.
+Agent skills marketplace for [SubImage](https://subimage.io), the cloud-native security platform. The same `SKILL.md` files work in Claude Code, Codex, Cursor, and other clients that support Agent Skills.
 
 Two plugins ship from this repo:
 
@@ -11,10 +11,37 @@ The two are independent; install whichever your workflow needs.
 
 ## Install
 
+### Claude Code
+
 ```bash
 claude plugin marketplace add subimagesec/skills
 claude plugin install subimage-setup@subimage
 claude plugin install subimage-mcp@subimage
+```
+
+### Codex
+
+```bash
+codex plugin marketplace add subimagesec/skills
+codex
+```
+
+Then run `/plugins`, select **SubImage Skills**, and install `subimage-setup` and/or `subimage-mcp`.
+
+### Cursor
+
+Open **Cursor Settings** -> **Rules**, add a **Remote Rule (Github)**, and enter:
+
+```text
+https://github.com/subimagesec/skills
+```
+
+Cursor imports the repo's Agent Skills and lists them under **Agent Decides**.
+
+### Other Agent Skills clients
+
+```bash
+npx skills add subimagesec/skills
 ```
 
 After install, skills are namespaced under their plugin:
@@ -49,10 +76,14 @@ Most are **model-invocable**: the agent picks them up automatically from the des
 ## Repository layout
 
 ```text
+.agents/
+  plugins/
+    marketplace.json              # Codex marketplace catalog
 .claude-plugin/
   marketplace.json               # marketplace catalog
 plugins/
   subimage-setup/
+    .codex-plugin/plugin.json    # Codex plugin manifest
     .claude-plugin/plugin.json   # plugin manifest
     skills/
       connect-aws/SKILL.md
@@ -62,6 +93,7 @@ plugins/
       connect-github/SKILL.md
       connect-declarative-schema/SKILL.md
   subimage-mcp/
+    .codex-plugin/plugin.json
     .claude-plugin/plugin.json
     skills/
       triage-new-findings/SKILL.md
@@ -77,9 +109,9 @@ plugins/
 
 ## Contributing
 
-Each `SKILL.md` follows the [Anthropic skill convention](https://agentskills.io/skill-creation/best-practices) and the [Claude Code plugin spec](https://code.claude.com/docs/en/plugins). When adding or editing a skill:
+Each `SKILL.md` follows the [Agent Skills standard](https://agentskills.io), with Claude Code and Codex plugin manifests layered on top for native installs. When adding or editing a skill:
 
-- Read the [skill creation best practices](https://agentskills.io/skill-creation/best-practices) and the companion [description optimization guide](https://agentskills.io/skill-creation/optimizing-descriptions).
+- Read the [skill creation best practices](https://agentskills.io/skill-creation/best-practices), the companion [description optimization guide](https://agentskills.io/skill-creation/optimizing-descriptions), the [Codex skills docs](https://developers.openai.com/codex/skills), and the [Cursor Agent Skills docs](https://cursor.com/docs/skills).
 - Frontmatter requires `name` (matches the directory) and `description` (when-to-trigger sentence with concrete user-typed phrasings).
 - Body sections we use across all skills: **What this does**, **When to use** (✅/❌), **Required inputs** (with explicit ask-the-user phrasing), **Prerequisites**, **Gotchas** (setup skills) or **Anti-patterns** (usage skills), **Workflow**, **Output**, **Verification**, **References**.
 - Never paste a literal `{{...}}` placeholder. Use `<NAMED_VAR>` and instruct the agent to ask the user for the value if it is not yet known.
@@ -95,3 +127,5 @@ MIT. See [LICENSE](./LICENSE).
 - Project home: https://subimage.io
 - Public reference catalog: https://skills.subimage.io
 - SubImage MCP docs: https://app.subimage.io/docs/agents/connect_via_mcp
+- Codex plugin docs: https://developers.openai.com/codex/plugins/build
+- Cursor Agent Skills docs: https://cursor.com/docs/skills

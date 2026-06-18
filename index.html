@@ -6,7 +6,7 @@
 		<title>SubImage Skills</title>
 		<meta
 			name="description"
-			content="Claude Code marketplace for SubImage: setup recipes for IaC repos and operator workflows over the SubImage MCP server."
+			content="Agent skills marketplace for SubImage: setup recipes for IaC repos and operator workflows over the SubImage MCP server."
 		/>
 		<style>
 			:root {
@@ -112,15 +112,23 @@
 		<main>
 			<h1>SubImage Skills</h1>
 			<p class="lede">
-				Claude Code marketplace for <a href="https://subimage.io">SubImage</a>, the
-				cloud-native security platform. Two plugins ship from this catalog: setup
-				recipes for IaC repos, and operator workflows over the SubImage MCP server.
+				Agent skills marketplace for <a href="https://subimage.io">SubImage</a>, the
+				cloud-native security platform. The same skills work in Claude Code, Codex,
+				Cursor, and other Agent Skills clients.
 			</p>
 
 			<h2>Install</h2>
+			<h3>Claude Code</h3>
 			<pre><code>claude plugin marketplace add subimagesec/skills
 claude plugin install subimage-setup@subimage
 claude plugin install subimage-mcp@subimage</code></pre>
+			<h3>Codex</h3>
+			<pre><code>codex plugin marketplace add subimagesec/skills
+codex
+# then run /plugins and install subimage-setup and/or subimage-mcp</code></pre>
+			<h3>Cursor</h3>
+			<pre><code>Cursor Settings -> Rules -> Add Rule -> Remote Rule (Github)
+https://github.com/subimagesec/skills</code></pre>
 
 			<h2>Plugins</h2>
 
@@ -289,10 +297,13 @@ claude plugin install subimage-mcp@subimage</code></pre>
 
 			<h2>Marketplace catalog</h2>
 			<p>
-				The raw catalog is at
+				The Claude Code catalog is at
 				<a href="/.claude-plugin/marketplace.json"
 					><code>/.claude-plugin/marketplace.json</code></a
-				>. Claude Code reads it from the GitHub source, not from this site.
+				>. The Codex catalog is at
+				<a href="/.agents/plugins/marketplace.json"
+					><code>/.agents/plugins/marketplace.json</code></a
+				>.
 			</p>
 
 			<footer>

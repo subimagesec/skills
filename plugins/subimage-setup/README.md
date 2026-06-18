@@ -4,10 +4,25 @@ Onboarding recipes for [SubImage](https://subimage.io) data sources from your Ia
 
 ## Install
 
+### Claude Code
+
 ```bash
 claude plugin marketplace add subimagesec/skills
 claude plugin install subimage-setup@subimage
 ```
+
+### Codex
+
+```bash
+codex plugin marketplace add subimagesec/skills
+codex
+```
+
+Then run `/plugins`, select **SubImage Skills**, and install `subimage-setup`.
+
+### Cursor
+
+Open **Cursor Settings** -> **Rules**, add a **Remote Rule (Github)**, and enter `https://github.com/subimagesec/skills`.
 
 ## Skills
 

@@ -1,0 +1,29 @@
+{
+	"name": "subimage-setup",
+	"version": "0.1.0",
+	"description": "Onboard cloud and SaaS data sources into SubImage from your IaC or CLI environment (AWS, GCP, Azure, GitHub, Kubernetes outpost). Terraform / CloudFormation / Helm / aws-cli / gcloud / az / gh paths.",
+	"author": {
+		"name": "SubImage",
+		"email": "support@subimage.io",
+		"url": "https://subimage.io"
+	},
+	"homepage": "https://github.com/subimagesec/skills/tree/main/plugins/subimage-setup",
+	"repository": "https://github.com/subimagesec/skills",
+	"license": "MIT",
+	"keywords": ["subimage", "cnapp", "iac", "terraform", "aws", "gcp", "azure", "github", "kubernetes"],
+	"interface": {
+		"displayName": "SubImage Setup",
+		"shortDescription": "Onboard cloud and SaaS data sources into SubImage.",
+		"longDescription": "Generate Terraform, CloudFormation, Helm, and CLI setup paths for connecting AWS, GCP, Azure, GitHub, Kubernetes, and custom context to SubImage.",
+		"developerName": "SubImage",
+		"category": "Security",
+		"capabilities": ["Interactive", "Write"],
+		"websiteURL": "https://subimage.io",
+		"defaultPrompt": [
+			"Connect AWS to SubImage.",
+			"Set up GitHub ingestion.",
+			"Deploy the Kubernetes outpost."
+		]
+	},
+	"skills": "./skills/"
+}
