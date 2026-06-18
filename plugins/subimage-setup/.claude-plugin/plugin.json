@@ -6,7 +6,7 @@
 		"name": "SubImage",
 		"email": "support@subimage.io"
 	},
-	"homepage": "https://github.com/subimagesec/skills/tree/main/plugins/subimage-setup",
+	"homepage": "https://skills.subimage.io/#subimage-setup",
 	"repository": "https://github.com/subimagesec/skills",
 	"license": "MIT"
 }

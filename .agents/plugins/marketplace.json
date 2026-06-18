@@ -1,0 +1,32 @@
+{
+	"name": "subimage",
+	"interface": {
+		"displayName": "SubImage Skills"
+	},
+	"plugins": [
+		{
+			"name": "subimage-setup",
+			"source": {
+				"source": "local",
+				"path": "./plugins/subimage-setup"
+			},
+			"policy": {
+				"installation": "AVAILABLE",
+				"authentication": "ON_INSTALL"
+			},
+			"category": "Security"
+		},
+		{
+			"name": "subimage-mcp",
+			"source": {
+				"source": "local",
+				"path": "./plugins/subimage-mcp"
+			},
+			"policy": {
+				"installation": "AVAILABLE",
+				"authentication": "ON_INSTALL"
+			},
+			"category": "Security"
+		}
+	]
+}

@@ -4,10 +4,25 @@ Operator workflows over the [SubImage](https://subimage.io) MCP server. Each ski
 
 ## Install
 
+### Claude Code
+
 ```bash
 claude plugin marketplace add subimagesec/skills
 claude plugin install subimage-mcp@subimage
 ```
+
+### Codex
+
+```bash
+codex plugin marketplace add subimagesec/skills
+codex
+```
+
+Then run `/plugins`, select **SubImage Skills**, and install `subimage-mcp`.
+
+### Cursor
+
+Open **Preferences** -> **Cursor Settings** -> **Rules, Skills, Subagents**, then choose **New** -> **Import from GitHub/GitLab** and enter `https://github.com/subimagesec/skills`.
 
 ## Skills
 

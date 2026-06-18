@@ -6,7 +6,7 @@
 		<title>SubImage Skills</title>
 		<meta
 			name="description"
-			content="Claude Code marketplace for SubImage: setup recipes for IaC repos and operator workflows over the SubImage MCP server."
+			content="Agent skills marketplace for SubImage: setup recipes for IaC repos and operator workflows over the SubImage MCP server."
 		/>
 		<style>
 			:root {
@@ -112,20 +112,29 @@
 		<main>
 			<h1>SubImage Skills</h1>
 			<p class="lede">
-				Claude Code marketplace for <a href="https://subimage.io">SubImage</a>, the
-				cloud-native security platform. Two plugins ship from this catalog: setup
-				recipes for IaC repos, and operator workflows over the SubImage MCP server.
+				Agent skills marketplace for <a href="https://subimage.io">SubImage</a>, the
+				cloud-native security platform. The same skills work in Claude Code, Codex,
+				Cursor, and other Agent Skills clients.
 			</p>
 
 			<h2>Install</h2>
+			<h3>Claude Code</h3>
 			<pre><code>claude plugin marketplace add subimagesec/skills
 claude plugin install subimage-setup@subimage
 claude plugin install subimage-mcp@subimage</code></pre>
+			<h3>Codex</h3>
+			<pre><code>codex plugin marketplace add subimagesec/skills
+codex
+# then run /plugins and install subimage-setup and/or subimage-mcp</code></pre>
+			<h3>Cursor</h3>
+			<pre><code>Preferences -> Cursor Settings -> Rules, Skills, Subagents
+New -> Import from GitHub/GitLab
+https://github.com/subimagesec/skills</code></pre>
 
 			<h2>Plugins</h2>
 
 			<div class="plugin-block">
-				<h3>subimage-setup</h3>
+				<h3 id="subimage-setup">subimage-setup</h3>
 				<p>
 					Onboarding recipes for SubImage data sources from your IaC or CLI
 					environment. No SubImage tenant connection required to generate the IaC
@@ -192,7 +201,7 @@ claude plugin install subimage-mcp@subimage</code></pre>
 			</div>
 
 			<div class="plugin-block">
-				<h3>subimage-mcp</h3>
+				<h3 id="subimage-mcp">subimage-mcp</h3>
 				<p>
 					Operator workflows over the SubImage MCP server. See the
 					<a href="https://app.subimage.io/docs/agents/connect_via_mcp"
@@ -289,10 +298,13 @@ claude plugin install subimage-mcp@subimage</code></pre>
 
 			<h2>Marketplace catalog</h2>
 			<p>
-				The raw catalog is at
+				The Claude Code catalog is at
 				<a href="/.claude-plugin/marketplace.json"
 					><code>/.claude-plugin/marketplace.json</code></a
-				>. Claude Code reads it from the GitHub source, not from this site.
+				>. The Codex catalog is at
+				<a href="/.agents/plugins/marketplace.json"
+					><code>/.agents/plugins/marketplace.json</code></a
+				>.
 			</p>
 
 			<footer>
