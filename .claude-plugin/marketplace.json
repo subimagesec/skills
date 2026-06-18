@@ -18,7 +18,7 @@
 			},
 			"category": "security",
 			"keywords": ["subimage", "cnapp", "iac", "terraform", "aws", "gcp", "azure", "github", "kubernetes"],
-			"homepage": "https://github.com/subimagesec/skills/tree/main/plugins/subimage-setup"
+			"homepage": "https://skills.subimage.io/#subimage-setup"
 		},
 		{
 			"name": "subimage-mcp",
@@ -31,7 +31,7 @@
 			},
 			"category": "security",
 			"keywords": ["subimage", "cnapp", "mcp", "findings", "cve", "iam", "container", "kubernetes", "ip", "dns", "attack-path", "cypher", "neo4j"],
-			"homepage": "https://github.com/subimagesec/skills/tree/main/plugins/subimage-mcp"
+			"homepage": "https://skills.subimage.io/#subimage-mcp"
 		}
 	]
 }

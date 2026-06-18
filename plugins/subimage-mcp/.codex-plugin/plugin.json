@@ -7,7 +7,7 @@
 		"email": "support@subimage.io",
 		"url": "https://subimage.io"
 	},
-	"homepage": "https://github.com/subimagesec/skills/tree/main/plugins/subimage-mcp",
+	"homepage": "https://skills.subimage.io/#subimage-mcp",
 	"repository": "https://github.com/subimagesec/skills",
 	"license": "MIT",
 	"keywords": [
