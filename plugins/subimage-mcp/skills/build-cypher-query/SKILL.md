@@ -69,7 +69,7 @@ Then either adapt the cached query or author one from the schema. Before writing
 
 If after step 2 you are still uncertain about a property's actual values, the path's shape, relationship direction, or whether matching rows exist, run **one** probe with `subimageRunCypher` using `LIMIT 5` or `COUNT(*)`. Prefer `toLower(...) CONTAINS ...` for text discovery.
 
-For relationship-direction uncertainty, keep the probe bounded and typed. Use the same validated labels and relationship type in an undirected diagnostic pattern, return `labels(startNode(r))`, `type(r)`, `labels(endNode(r))`, and key IDs, then correct the final query to the directed schema shape. Do not leave the final query undirected unless direction is genuinely irrelevant and the query deduplicates rows.
+For relationship-direction uncertainty, keep the probe bounded and typed. Use the same validated labels and relationship type in an undirected diagnostic pattern, return `labels(startNode(r))`, `type(r)`, `labels(endNode(r))`, and key IDs, then correct the final query to the directed schema shape. The undirected probe is not the answer; never return it as the final query.
 
 Do not stack speculative probes; refine labels or filters instead.
 
@@ -85,7 +85,7 @@ Do not run the final query if a dedicated non-Cypher tool has already returned a
 ## Schema rules
 
 - Never invent node labels, property names, or relationship types. Use only what `subimageListModuleSchemaNodes` or `subimageGetNodesSchema` returned.
-- Relationship direction is schema. Use the directed relationship examples from `subimageGetNodesSchema`; do not infer direction from relationship names, user wording, or prose like "to Label" in a relationship list.
+- Relationship direction is schema. Use the directed relationship examples from `subimageGetNodesSchema`; do not infer direction from relationship names, user wording, or prose like "to Label" in a relationship list. If direction is not semantically important, still use the schema direction and deduplicate rows if needed.
 - Ontology labels (`User`, `Container`, `Image`, `ComputeInstance`, `Database`, `Group`, `Role`, ...) normalize identity, not edges or every property. `subimageGetNodesSchema` returns one section per underlying primary label; review them all, and prefer the provider-native property over the `_ont_*` projection when both are listed (the ontology projection may be null on a tenant even when the provider-native field is populated).
 - If the user requests a property or entity that does not exist in the schema, stop and tell them inline. Do not guess.
 
@@ -96,7 +96,7 @@ The query passed to `subimageRunCypher` must:
 - use only validated labels, properties, and relationships,
 - give every node variable at least one label (no bare `MATCH (n)`); unlabeled scans touch the entire graph and time out,
 - give every relationship pattern a variable and an explicit type (e.g. `(a)-[r1:RELATES_TO]->(b)`; never `(a)-[:RELATES_TO]->(b)` or `(a)-[]->(b)`),
-- use the schema-declared direction for every relationship. If a cached model query or draft uses the opposite arrow, correct it before execution and note the correction in prose if useful.
+- use the schema-declared direction for every relationship. Final queries must not contain undirected relationship patterns like `(a)-[r:REL]-(b)` or `(a)--(b)`. If a cached model query or draft uses the opposite arrow or an undirected relationship, correct it before execution and note the correction in prose if useful.
 - include `LIMIT`, default `LIMIT 100` unless the user asks otherwise,
 - return only the needed fields, not whole nodes,
 - always include `n.id` (or the equivalent identity property) in the `RETURN` clause for every matched node so results can be cross-referenced,
@@ -125,7 +125,8 @@ Simplify before running:
 
 - Reframing the user's question and immediately running `subimageRunCypher` with a query authored from memory. Always ground labels via `subimageGetNodesSchema` (or a `searchModelQueries` hit) first.
 - Reversing a relationship because the type name or relationship-list prose reads naturally in the other direction. Schema examples are authoritative for direction.
-- Using undirected relationships as the final answer to avoid choosing direction. Undirected matches traverse both ways, can double-count rows, and can hide modeling mistakes.
+- Using undirected relationships as the final answer to avoid choosing direction. Undirected matches traverse both ways, can double-count rows, and can hide modeling mistakes. Use them only for the single bounded diagnostic probe in step 3.
+- Returning a direction-diagnostic probe as the final answer, including queries that project `labels(startNode(r))` or `labels(endNode(r))`. Convert the probe result into a directed final query first.
 - Calling `saveModelQuery` on a query that only passed syntax. Cache only after a real execution returned useful rows.
 - Reformatting `subimageRunCypher` results as a markdown table. The tool streams an interactive table; summarize, do not duplicate.
 - Looping speculative probes ("try this, no, try that"). One probe with `LIMIT 5` or `COUNT(*)`, then commit.
@@ -136,7 +137,7 @@ Simplify before running:
 
 - Cross-provider questions: check for unified ontology / common node types before using provider-specific labels.
 - Admin access questions: check both direct and indirect privilege paths, including managed policies, inline policies, wildcard `Allow` permissions, and assume-role chains.
-- S3 bucket policy statements: when schema examples show `(:S3Bucket)-[:POLICY_STATEMENT]->(:S3PolicyStatement)`, query that direction. Do not reverse it to `(stmt:S3PolicyStatement)-[:POLICY_STATEMENT]->(bucket:S3Bucket)`.
+- S3 bucket policy statements: when schema examples show `(:S3Bucket)-[:POLICY_STATEMENT]->(:S3PolicyStatement)`, query that direction. Do not reverse it to `(stmt:S3PolicyStatement)-[:POLICY_STATEMENT]->(bucket:S3Bucket)` and do not leave it undirected as `(bucket)-[:POLICY_STATEMENT]-(stmt)`.
 - Use `UNION` and `RETURN DISTINCT` only when required.
 
 ## References
