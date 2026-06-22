@@ -1,7 +1,7 @@
 {
 	"name": "subimage-mcp",
 	"version": "0.1.0",
-	"description": "Operator workflows over the SubImage MCP server: triage findings, investigate CVEs, audit IAM privilege, investigate containers and clusters, resolve IP/domain ownership, review attack paths, audit SubImage coverage, build Cypher queries, and author tenant-local custom rules.",
+	"description": "Operator workflows over the SubImage MCP server: triage findings, investigate CVEs, audit IAM privilege, investigate containers and clusters, resolve IP/domain ownership, explain public exposure causes, review attack paths, audit SubImage coverage, build Cypher queries, and author tenant-local custom rules.",
 	"author": {
 		"name": "SubImage",
 		"email": "support@subimage.io",
@@ -21,6 +21,7 @@
 		"kubernetes",
 		"ip",
 		"dns",
+		"public-exposure",
 		"attack-path",
 		"cypher",
 		"neo4j"
@@ -28,7 +29,7 @@
 	"interface": {
 		"displayName": "SubImage MCP",
 		"shortDescription": "Operate SubImage through its MCP server.",
-		"longDescription": "Run repeatable SubImage workflows for findings triage, CVE investigation, IAM review, container and IP investigation, attack-path review, coverage audit, Cypher querying, and custom rule authoring.",
+		"longDescription": "Run repeatable SubImage workflows for findings triage, CVE investigation, IAM review, container and IP investigation, public exposure cause analysis, attack-path review, coverage audit, Cypher querying, and custom rule authoring.",
 		"developerName": "SubImage",
 		"category": "Security",
 		"capabilities": ["Interactive"],

@@ -123,48 +123,6 @@ RETURN 'CloudFrontDistribution' AS resource_type, cf.id AS resource_id, cf.domai
 LIMIT 100
 ```
 
-### CloudFront/S3 public exposure cause
-
-Use this when a domain investigation turns into "is this public because of CloudFront or S3 policy?" Schema-validate first, especially the directed `(:S3Bucket)-[:POLICY_STATEMENT]->(:S3PolicyStatement)` relationship.
-
-```cypher
-MATCH (b:S3Bucket)
-WHERE b.name = $value OR b.id = $value
-OPTIONAL MATCH (cf:CloudFrontDistribution)-[r_serves:SERVES_FROM]->(b)
-OPTIONAL MATCH (b)-[r_stmt:POLICY_STATEMENT]->(stmt:S3PolicyStatement)
-RETURN 'bucket_name_or_id' AS match_path,
-       b.id AS bucket_id, b.name AS bucket_name,
-       b.anonymous_access AS bucket_anonymous_access,
-       b.anonymous_actions AS bucket_anonymous_actions,
-       b.block_public_policy AS bucket_block_public_policy,
-       b.restrict_public_buckets AS bucket_restrict_public_buckets,
-       cf.id AS cloudfront_id, cf.distribution_id AS distribution_id,
-       cf.domain_name AS cloudfront_domain, cf.aliases AS cloudfront_aliases,
-       cf.enabled AS cloudfront_enabled, cf.status AS cloudfront_status,
-       stmt.id AS statement_id, stmt.sid AS statement_sid,
-       stmt.effect AS statement_effect, stmt.principal AS statement_principal,
-       stmt.action AS statement_action, stmt.resource AS statement_resource,
-       stmt.condition AS statement_condition
-UNION
-MATCH (cf:CloudFrontDistribution)-[r_serves:SERVES_FROM]->(b:S3Bucket)
-WHERE cf.domain_name = $value OR ANY(alias IN coalesce(cf.aliases, []) WHERE alias = $value)
-OPTIONAL MATCH (b)-[r_stmt:POLICY_STATEMENT]->(stmt:S3PolicyStatement)
-RETURN 'cloudfront_domain_or_alias' AS match_path,
-       b.id AS bucket_id, b.name AS bucket_name,
-       b.anonymous_access AS bucket_anonymous_access,
-       b.anonymous_actions AS bucket_anonymous_actions,
-       b.block_public_policy AS bucket_block_public_policy,
-       b.restrict_public_buckets AS bucket_restrict_public_buckets,
-       cf.id AS cloudfront_id, cf.distribution_id AS distribution_id,
-       cf.domain_name AS cloudfront_domain, cf.aliases AS cloudfront_aliases,
-       cf.enabled AS cloudfront_enabled, cf.status AS cloudfront_status,
-       stmt.id AS statement_id, stmt.sid AS statement_sid,
-       stmt.effect AS statement_effect, stmt.principal AS statement_principal,
-       stmt.action AS statement_action, stmt.resource AS statement_resource,
-       stmt.condition AS statement_condition
-LIMIT 100
-```
-
 ### Load balancer DNS names (v1 + v2)
 
 ```cypher

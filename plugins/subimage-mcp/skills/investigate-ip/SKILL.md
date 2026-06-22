@@ -22,6 +22,7 @@ The graph is authoritative for internal ownership; `subimageEnrichIp` adds the e
 ✅ Tracing a domain's resolution chain to the resource behind it.
 
 ❌ Listing all your public IPs → `subimageGetInventory` with `inventory_type=publicips`.
+❌ Explaining why a resource is public/exposed → `subimage-mcp:investigate-public-exposure`.
 ❌ The attack path from an exposed resource → `subimage-mcp:review-attack-path`.
 
 ## Prerequisites
@@ -58,9 +59,7 @@ When unsure whether a property is scalar or list, probe one row: `MATCH (n:Label
 
 If one query errors (e.g. a type error on an unexpected list property), log it and continue with the rest rather than aborting the whole lookup.
 
-When the user asks whether a domain or bucket is public, exposed, or public because of CloudFront, do not stop after generic DNS/CloudFront lookup. Run the § CloudFront/S3 public exposure cause query, because bucket names can look like hostnames and may not be CloudFront aliases. That query covers both paths: a CloudFront distribution serving a bucket, and a direct `S3Bucket` whose `name` or `id` equals the input. Do not conclude "no CloudFront/S3 match" until the direct `S3Bucket` branch has also been checked.
-
-For CloudFront/S3 public exposure cause questions, inspect `S3PolicyStatement` nodes before answering. Validate the schema, then use the directed pattern `(:S3Bucket)-[:POLICY_STATEMENT]->(:S3PolicyStatement)` from `subimageGetNodesSchema`; bucket rollup fields such as `anonymous_access` are not enough to distinguish CloudFront-only access from an anonymous bucket policy grant. Include relevant statement `sid`, `principal`, `action`, `resource`, and `condition` values in the answer.
+If the investigation turns into "why is this resource public/exposed?", switch to `subimage-mcp:investigate-public-exposure`. Keep this skill focused on IP/domain ownership and DNS/resource attribution.
 
 ### 3. Trace the DNS chain (domains, and IPs reachable via DNS)
 
@@ -93,10 +92,6 @@ In-chat provenance report (no file output). Tag resources with `[[entity:<Label>
 - **Resource path**: <account → resource type → resource id>
 - **Risk notes**: <exposed_internet=true, public IP on sensitive asset, anonymizer-sourced traffic, …>
 
-## Public exposure cause (when asked)
-- CloudFront path: <distribution id/domain/aliases, whether it serves the bucket>
-- S3 bucket policy statements: <sid, principal, action, resource, condition>
-- Conclusion: <CloudFront-only, direct anonymous bucket policy, or both>
 ```
 
 ## Anti-patterns
@@ -105,6 +100,7 @@ In-chat provenance report (no file output). Tag resources with `[[entity:<Label>
 - Interpolating the IP/domain into the query string. Always pass it as the `$value` parameter.
 - Calling `subimageEnrichIp` on a private/internal address. It only attributes routable public IPs.
 - Trusting template labels/properties without schema-validating. Network/DNS labels drift across tenants.
+- Answering public-exposure-cause questions here. Use `subimage-mcp:investigate-public-exposure`.
 - Aborting the whole lookup when one query errors. Skip the failing query, keep the rest.
 - Unbounded queries. `LIMIT` everything (templates default to 100).
 
@@ -113,5 +109,6 @@ In-chat provenance report (no file output). Tag resources with `[[entity:<Label>
 - Cypher templates: [`references/cypher-templates.md`](references/cypher-templates.md) (schema-validate; mind list-typed properties).
 - Query discipline: `subimage-mcp:build-cypher-query`.
 - External IP attribution: `subimageEnrichIp` (Spur).
+- Public exposure cause: `subimage-mcp:investigate-public-exposure`.
 - Pivot to attack surface from a resolved resource: `subimage-mcp:review-attack-path`.
 - Tool guide (loaded by `subimageReadMe`): the enrichment and graph-query domains.
