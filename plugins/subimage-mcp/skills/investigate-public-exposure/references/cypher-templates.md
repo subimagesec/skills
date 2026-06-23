@@ -86,7 +86,7 @@ LIMIT 100
 
 ## LoadBalancer EXPOSE ontology pivot
 
-Use after resolving a load balancer, target service, instance, pod, or container. `EXPOSE` is produced by analysis jobs and should be paired with provider-specific proof when explaining why.
+Use after resolving a load balancer, target service, instance, pod, or container. `EXPOSE` identifies a target path, but it can also exist for internal load balancers. Pair it with provider-specific proof of the front door's publicness when explaining why.
 
 ```cypher
 MATCH (lb:LoadBalancer)
@@ -118,59 +118,64 @@ LIMIT 100
 Use when the user asks whether a domain or bucket is public because of CloudFront, direct S3 bucket policy, or both. Validate the directed `CloudFrontDistribution` to `S3Bucket` and `S3Bucket` to `S3PolicyStatement` relationships before running.
 
 ```cypher
-MATCH (b:S3Bucket)
-WHERE b.name = $value OR b.id = $value
-OPTIONAL MATCH (cf:CloudFrontDistribution)-[:SERVES_FROM]->(b)
-OPTIONAL MATCH (b)-[:POLICY_STATEMENT]->(stmt:S3PolicyStatement)
-RETURN 'bucket_name_or_id' AS match_path,
-       b.id AS bucket_id,
-       b.name AS bucket_name,
-       b.anonymous_access AS bucket_anonymous_access,
-       b.anonymous_actions AS bucket_anonymous_actions,
-       b.block_public_policy AS bucket_block_public_policy,
-       b.restrict_public_buckets AS bucket_restrict_public_buckets,
-       b.block_public_acls AS bucket_block_public_acls,
-       b.ignore_public_acls AS bucket_ignore_public_acls,
-       cf.id AS cloudfront_id,
-       cf.distribution_id AS distribution_id,
-       cf.domain_name AS cloudfront_domain,
-       cf.aliases AS cloudfront_aliases,
-       cf.enabled AS cloudfront_enabled,
-       cf.status AS cloudfront_status,
-       stmt.id AS statement_id,
-       stmt.sid AS statement_sid,
-       stmt.effect AS statement_effect,
-       stmt.principal AS statement_principal,
-       stmt.action AS statement_action,
-       stmt.resource AS statement_resource,
-       stmt.condition AS statement_condition
-UNION
-MATCH (cf:CloudFrontDistribution)-[:SERVES_FROM]->(b:S3Bucket)
-WHERE cf.domain_name = $value
-   OR ANY(alias IN coalesce(cf.aliases, []) WHERE alias = $value)
-OPTIONAL MATCH (b)-[:POLICY_STATEMENT]->(stmt:S3PolicyStatement)
-RETURN 'cloudfront_domain_or_alias' AS match_path,
-       b.id AS bucket_id,
-       b.name AS bucket_name,
-       b.anonymous_access AS bucket_anonymous_access,
-       b.anonymous_actions AS bucket_anonymous_actions,
-       b.block_public_policy AS bucket_block_public_policy,
-       b.restrict_public_buckets AS bucket_restrict_public_buckets,
-       b.block_public_acls AS bucket_block_public_acls,
-       b.ignore_public_acls AS bucket_ignore_public_acls,
-       cf.id AS cloudfront_id,
-       cf.distribution_id AS distribution_id,
-       cf.domain_name AS cloudfront_domain,
-       cf.aliases AS cloudfront_aliases,
-       cf.enabled AS cloudfront_enabled,
-       cf.status AS cloudfront_status,
-       stmt.id AS statement_id,
-       stmt.sid AS statement_sid,
-       stmt.effect AS statement_effect,
-       stmt.principal AS statement_principal,
-       stmt.action AS statement_action,
-       stmt.resource AS statement_resource,
-       stmt.condition AS statement_condition
+CALL {
+  MATCH (b:S3Bucket)
+  WHERE b.name = $value OR b.id = $value
+  OPTIONAL MATCH (cf:CloudFrontDistribution)-[:SERVES_FROM]->(b)
+  OPTIONAL MATCH (b)-[:POLICY_STATEMENT]->(stmt:S3PolicyStatement)
+  RETURN 'bucket_name_or_id' AS match_path,
+         b.id AS bucket_id,
+         b.name AS bucket_name,
+         b.anonymous_access AS bucket_anonymous_access,
+         b.anonymous_actions AS bucket_anonymous_actions,
+         b.block_public_policy AS bucket_block_public_policy,
+         b.restrict_public_buckets AS bucket_restrict_public_buckets,
+         b.block_public_acls AS bucket_block_public_acls,
+         b.ignore_public_acls AS bucket_ignore_public_acls,
+         cf.id AS cloudfront_id,
+         cf.distribution_id AS distribution_id,
+         cf.domain_name AS cloudfront_domain,
+         cf.aliases AS cloudfront_aliases,
+         cf.enabled AS cloudfront_enabled,
+         cf.status AS cloudfront_status,
+         stmt.id AS statement_id,
+         stmt.sid AS statement_sid,
+         stmt.effect AS statement_effect,
+         stmt.principal AS statement_principal,
+         stmt.action AS statement_action,
+         stmt.resource AS statement_resource,
+         stmt.condition AS statement_condition
+  LIMIT 100
+  UNION
+  MATCH (cf:CloudFrontDistribution)-[:SERVES_FROM]->(b:S3Bucket)
+  WHERE cf.domain_name = $value
+     OR ANY(alias IN coalesce(cf.aliases, []) WHERE alias = $value)
+  OPTIONAL MATCH (b)-[:POLICY_STATEMENT]->(stmt:S3PolicyStatement)
+  RETURN 'cloudfront_domain_or_alias' AS match_path,
+         b.id AS bucket_id,
+         b.name AS bucket_name,
+         b.anonymous_access AS bucket_anonymous_access,
+         b.anonymous_actions AS bucket_anonymous_actions,
+         b.block_public_policy AS bucket_block_public_policy,
+         b.restrict_public_buckets AS bucket_restrict_public_buckets,
+         b.block_public_acls AS bucket_block_public_acls,
+         b.ignore_public_acls AS bucket_ignore_public_acls,
+         cf.id AS cloudfront_id,
+         cf.distribution_id AS distribution_id,
+         cf.domain_name AS cloudfront_domain,
+         cf.aliases AS cloudfront_aliases,
+         cf.enabled AS cloudfront_enabled,
+         cf.status AS cloudfront_status,
+         stmt.id AS statement_id,
+         stmt.sid AS statement_sid,
+         stmt.effect AS statement_effect,
+         stmt.principal AS statement_principal,
+         stmt.action AS statement_action,
+         stmt.resource AS statement_resource,
+         stmt.condition AS statement_condition
+  LIMIT 100
+}
+RETURN *
 LIMIT 100
 ```
 
@@ -595,13 +600,17 @@ LIMIT 100
 ```cypher
 MATCH (bucket:GCPBucket:ObjectStorage)
 WHERE bucket.id = $value OR bucket.name = $value
+OPTIONAL MATCH (binding:GCPPolicyBinding)-[:APPLIES_TO]->(bucket)
 RETURN bucket.id AS bucket_id,
        bucket.name AS bucket_name,
        bucket.acl_public AS acl_public,
        bucket.iam_config_public_access_prevention AS public_access_prevention,
        bucket._ont_public AS ont_public,
-       bucket.anonymous_access AS anonymous_access,
-       bucket.anonymous_actions AS anonymous_actions
+       binding.id AS binding_id,
+       binding.role AS binding_role,
+       binding.is_public AS binding_is_public,
+       binding.has_condition AS binding_has_condition,
+       binding.members AS binding_members
 LIMIT 100
 ```
 
@@ -640,21 +649,23 @@ MATCH (vm:AzureVirtualMachine)<-[:ATTACHED_TO]-(nic:AzureNetworkInterface)-[:ASS
 WHERE vm.id = $value
    OR vm.name = $value
    OR pip.ip_address = $value
-OPTIONAL MATCH (nic)-[:ASSOCIATED_WITH]->(nic_nsg:AzureNetworkSecurityGroup)<-[:MEMBER_OF_AZURE_NSG]-(nic_rule:AzureNetworkSecurityRule:IpPermissionInbound)
-OPTIONAL MATCH (nic)-[:ATTACHED_TO]->(:AzureSubnet)-[:ASSOCIATED_WITH]->(subnet_nsg:AzureNetworkSecurityGroup)<-[:MEMBER_OF_AZURE_NSG]-(subnet_rule:AzureNetworkSecurityRule:IpPermissionInbound)
-WITH vm, nic, pip,
-     coalesce(nic_nsg, subnet_nsg) AS nsg,
-     coalesce(nic_rule, subnet_rule) AS rule
-WHERE rule IS NULL
-   OR (
-        rule.access = 'Allow'
-        AND rule.direction = 'Inbound'
-        AND (
-              rule.source_address_prefix IN ['*', 'Internet', '0.0.0.0/0', '::/0']
-              OR 'Internet' IN coalesce(rule.source_address_prefixes, [])
-              OR '0.0.0.0/0' IN coalesce(rule.source_address_prefixes, [])
-              OR '::/0' IN coalesce(rule.source_address_prefixes, [])
-            )
+CALL {
+  WITH nic
+  MATCH (nic)-[:ASSOCIATED_WITH]->(nsg:AzureNetworkSecurityGroup)<-[:MEMBER_OF_AZURE_NSG]-(rule:AzureNetworkSecurityRule:IpPermissionInbound)
+  RETURN 'nic' AS nsg_scope, nsg, rule
+  UNION
+  WITH nic
+  MATCH (nic)-[:ATTACHED_TO]->(:AzureSubnet)-[:ASSOCIATED_WITH]->(nsg:AzureNetworkSecurityGroup)<-[:MEMBER_OF_AZURE_NSG]-(rule:AzureNetworkSecurityRule:IpPermissionInbound)
+  RETURN 'subnet' AS nsg_scope, nsg, rule
+}
+WITH vm, nic, pip, nsg_scope, nsg, rule
+WHERE rule.access = 'Allow'
+  AND rule.direction = 'Inbound'
+  AND (
+        rule.source_address_prefix IN ['*', 'Internet', '0.0.0.0/0', '::/0']
+        OR 'Internet' IN coalesce(rule.source_address_prefixes, [])
+        OR '0.0.0.0/0' IN coalesce(rule.source_address_prefixes, [])
+        OR '::/0' IN coalesce(rule.source_address_prefixes, [])
       )
 RETURN vm.id AS vm_id,
        vm.name AS vm_name,
@@ -663,6 +674,7 @@ RETURN vm.id AS vm_id,
        nic.id AS network_interface_id,
        pip.id AS public_ip_id,
        pip.ip_address AS public_ip_address,
+       nsg_scope AS nsg_scope,
        nsg.id AS nsg_id,
        nsg.name AS nsg_name,
        rule.id AS rule_id,
@@ -676,7 +688,7 @@ LIMIT 100
 
 ## Azure public storage and databases
 
-Use for Azure Blob, SQL, and Cosmos DB exposure. Validate exact labels in the tenant schema.
+Use for Azure Blob, SQL, and Cosmos DB exposure. Validate exact labels in the tenant schema. For SQL firewall rules, `0.0.0.0` to `0.0.0.0` is the Azure-services exception, not arbitrary public internet.
 
 ```cypher
 MATCH (account:AzureStorageAccount)-[:USES]->(blob:AzureStorageBlobService)-[:CONTAINS]->(container:AzureStorageBlobContainer)
@@ -697,14 +709,20 @@ LIMIT 100
 ```cypher
 MATCH (server:AzureSQLServer)
 WHERE server.id = $value OR server.name = $value
-OPTIONAL MATCH (server)-[:RESOURCE]->(rule:AzureSQLServerFirewallRule)
+OPTIONAL MATCH (rule:AzureSQLServerFirewallRule:IpPermissionInbound)-[:MEMBER_OF_AZURE_SQL_SERVER]->(server)
 RETURN server.id AS sql_server_id,
        server.name AS sql_server_name,
        server.public_network_access AS public_network_access,
        rule.id AS firewall_rule_id,
        rule.name AS firewall_rule_name,
        rule.start_ip_address AS start_ip_address,
-       rule.end_ip_address AS end_ip_address
+       rule.end_ip_address AS end_ip_address,
+       CASE
+         WHEN rule.start_ip_address = '0.0.0.0' AND rule.end_ip_address = '255.255.255.255' THEN 'public_internet'
+         WHEN rule.start_ip_address = '0.0.0.0' AND rule.end_ip_address = '0.0.0.0' THEN 'azure_services_only'
+         WHEN rule.id IS NOT NULL THEN 'specific_range'
+         ELSE 'no_firewall_rule_found'
+       END AS firewall_rule_exposure_class
 LIMIT 100
 ```
 

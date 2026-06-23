@@ -45,7 +45,7 @@ Ask for a missing value only when needed:
 - Starting-point Cypher templates live in `references/cypher-templates.md`. Treat them as probes, not proof, until adjusted to the live schema.
 - Prefer provider-independent ontology pivots when they exist: `PublicIP`, `LoadBalancer`, `DNSRecord`, `ObjectStorage`, `Function`, `Database`, `ComputeInstance`, `ComputeCluster`, `ComputeService`, `ComputePod`, `Container`, and `Snapshot`.
 - Provider analysis fields such as `exposed_internet`, `exposed_internet_type`, `_ont_public`, `anonymous_access`, and `anonymous_actions` are useful evidence, but they are not always enough to explain the cause. Reconstruct the raw path when the user asks "why".
-- `EXPOSE` edges are strong evidence that a provider analysis job connected a public surface to a backing resource. Still inspect the front door and target path so the answer can explain whether the exposure is direct, load-balanced, CDN-mediated, or policy-mediated.
+- `EXPOSE` edges identify a front-door-to-target path, but they are not proof that the front door is public. Check the exposing node's publicness, scheme, listener, security-rule path, and relationship metadata before using the edge as public-exposure evidence.
 - Distinguish public front door from direct public backend. A private pod behind an internet-facing ALB is public through the ALB, not necessarily directly public.
 - If a schema-directed query returns nothing but a rollup says the asset is exposed, treat that as a diagnostic moment: inspect module status, analysis-job coverage, and nearby raw paths before concluding the graph is wrong.
 
@@ -91,7 +91,7 @@ Start with cross-provider pivots so you do not miss long chains:
 - **CloudFront and S3**: Check `CloudFrontDistribution` aliases/domain, `SERVES_FROM` bucket origin, and direct bucket policy statements. For S3 buckets, inspect `S3PolicyStatement` fields before concluding direct public access. A CloudFront origin alone does not prove the bucket is directly public.
 - **S3 direct policy/ACL**: Check bucket rollups (`anonymous_access`, `anonymous_actions`, block-public-access fields) plus policy statements with `effect`, `principal`, `action`, `resource`, and `condition`.
 - **EC2 direct exposure**: Look for a public IP/public DNS plus `AWSIpPermissionInbound` rules connected to `AWSIpRange` values such as `0.0.0.0/0` or `::/0`. Include protocol and port range, and note whether the rule reaches the instance through a security group or network interface.
-- **ALB/NLB/classic ELB**: Check internet-facing scheme, listeners, security group rules for ALB/classic ELB, and `EXPOSE` edges to instances, private IPs, Kubernetes pods/containers, or ECS containers. NLB exposure can be scheme/listener based even without a security group.
+- **ALB/NLB/classic ELB**: Check internet-facing scheme, listeners, security group rules for ALB/classic ELB, and `EXPOSE` target edges to instances, private IPs, Kubernetes pods/containers, or ECS containers. Internal load balancers can also have `EXPOSE` target edges, so publicness must come from the load balancer path. NLB exposure can be scheme/listener based even without a security group.
 - **ECS**: Prefer `LoadBalancer-[:EXPOSE]->Container` when present. If absent, reconstruct ALB/NLB to private IP to network interface to `ECSTask` to `ECSContainer`, then walk `WORKLOAD_PARENT` to `ECSService`/`ECSCluster`.
 - **EKS control plane**: Check `EKSCluster.endpoint_public_access`, `_ont_control_plane_public_access`, and `exposed_internet`. CIDR-restricted public endpoints can still be public control-plane exposure; report the CIDR limitation if modeled.
 - **Kubernetes on EKS**: Check `KubernetesIngress` or `KubernetesService` `USES_LOAD_BALANCER`, service `TARGETS` pod, pod/container targets, and `EXPOSE` edges from AWS load balancers.
@@ -157,7 +157,7 @@ Classify the final answer into one or more categories:
 Give confidence:
 
 - **High**: raw directed path and relevant policy/rule fields prove the cause.
-- **Medium**: ontology `EXPOSE`/`POINTS_TO` plus provider rollup proves exposure, but raw cause is incomplete.
+- **Medium**: ontology `EXPOSE`/`POINTS_TO` plus publicness evidence proves exposure, but raw cause is incomplete.
 - **Low**: only DNS, module status, broad rollup, or partial topology exists.
 
 ## Output
