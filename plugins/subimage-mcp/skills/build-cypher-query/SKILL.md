@@ -136,7 +136,6 @@ Simplify before running:
 
 - Cross-provider questions: check for unified ontology / common node types before using provider-specific labels.
 - Admin access questions: check both direct and indirect privilege paths, including managed policies, inline policies, wildcard `Allow` permissions, and assume-role chains.
-- S3 bucket policy statements: when schema examples show `(:S3Bucket)-[:POLICY_STATEMENT]->(:S3PolicyStatement)`, query that direction. Do not reverse it to `(stmt:S3PolicyStatement)-[:POLICY_STATEMENT]->(bucket:S3Bucket)`.
 - Use `UNION` and `RETURN DISTINCT` only when required.
 
 ## References
