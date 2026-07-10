@@ -78,13 +78,22 @@ LIMIT 100
 Gateway and route edges identify routing intent; still inspect the backing service/load-balancer path.
 
 ```cypher
-MATCH (gateway:KubernetesGateway)-[:ROUTES]->(route:KubernetesHTTPRoute)-[:TARGETS]->(svc:KubernetesService)
-WHERE gateway.id = $value
-   OR gateway.name = $value
-   OR route.id = $value
-   OR route.name = $value
-   OR svc.id = $value
-   OR svc.name = $value
+CALL {
+  MATCH (gateway:KubernetesGateway)
+  WHERE gateway.id = $value OR gateway.name = $value
+  MATCH (gateway)-[:ROUTES]->(route:KubernetesHTTPRoute)-[:TARGETS]->(svc:KubernetesService)
+  RETURN gateway, route, svc
+  UNION
+  MATCH (route:KubernetesHTTPRoute)
+  WHERE route.id = $value OR route.name = $value
+  MATCH (gateway:KubernetesGateway)-[:ROUTES]->(route)-[:TARGETS]->(svc:KubernetesService)
+  RETURN gateway, route, svc
+  UNION
+  MATCH (svc:KubernetesService)
+  WHERE svc.id = $value OR svc.name = $value
+  MATCH (gateway:KubernetesGateway)-[:ROUTES]->(route:KubernetesHTTPRoute)-[:TARGETS]->(svc)
+  RETURN gateway, route, svc
+}
 OPTIONAL MATCH (svc)-[:USES_LOAD_BALANCER]->(lb:LoadBalancer)
 OPTIONAL MATCH (svc)-[:TARGETS]->(pod:KubernetesPod)
 RETURN gateway.id AS gateway_id,

@@ -48,24 +48,41 @@ LIMIT 100
 
 ## Load balancer and direct compute exposure
 
-Include deny-rule checks before making high-confidence direct-exposure claims.
+Forwarding rules and backend services do not have a direct modeled relationship, so inspect them with separate bounded probes. Include deny-rule checks before making high-confidence direct-exposure claims.
 
 ```cypher
-MATCH (backend:GCPBackendService)-[:ROUTES_TO]->(group:GCPInstanceGroup)-[:HAS_MEMBER]->(instance:GCPInstance)
-WHERE backend.id = $value
-   OR backend.name = $value
-   OR instance.id = $value
-   OR instance.name = $value
-OPTIONAL MATCH (fr:GCPForwardingRule)
-WHERE fr.target = backend.self_link OR fr.target = backend.id
+MATCH (fr:GCPForwardingRule)
+WHERE fr.id = $value
+   OR fr.name = $value
+   OR fr.ip_address = $value
+RETURN fr.id AS forwarding_rule_id,
+       fr.name AS forwarding_rule_name,
+       fr.ip_address AS forwarding_rule_ip,
+       fr.ip_protocol AS forwarding_rule_protocol,
+       fr.port_range AS forwarding_rule_port_range,
+       fr.ports AS forwarding_rule_ports,
+       fr.target AS forwarding_rule_target,
+       fr.load_balancing_scheme AS forwarding_rule_scheme,
+       fr.exposed_internet AS forwarding_rule_exposed_internet,
+       fr.exposed_internet_type AS forwarding_rule_exposed_internet_type
+LIMIT 100
+```
+
+```cypher
+CALL {
+  MATCH (backend:GCPBackendService)
+  WHERE backend.id = $value OR backend.name = $value
+  MATCH (backend)-[:ROUTES_TO]->(group:GCPInstanceGroup)-[:HAS_MEMBER]->(instance:GCPInstance)
+  RETURN backend, group, instance
+  UNION
+  MATCH (instance:GCPInstance)
+  WHERE instance.id = $value OR instance.name = $value
+  MATCH (backend:GCPBackendService)-[:ROUTES_TO]->(group:GCPInstanceGroup)-[:HAS_MEMBER]->(instance)
+  RETURN backend, group, instance
+}
 RETURN backend.id AS backend_service_id,
        backend.name AS backend_service_name,
        backend.load_balancing_scheme AS backend_load_balancing_scheme,
-       fr.id AS forwarding_rule_id,
-       fr.name AS forwarding_rule_name,
-       fr.ip_address AS forwarding_rule_ip,
-       fr.load_balancing_scheme AS forwarding_rule_scheme,
-       fr.exposed_internet AS forwarding_rule_exposed_internet,
        group.id AS instance_group_id,
        group.name AS instance_group_name,
        instance.id AS instance_id,

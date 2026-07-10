@@ -96,14 +96,23 @@ LIMIT 100
 Use for EC2 instances, public IPs, and "which security group/rule exposes this" questions. Include IPv6-style all-internet ranges when represented as `AWSIpRange`.
 
 ```cypher
-MATCH (cidr:AWSIpRange)-[:MEMBER_OF_IP_RULE]->(rule:AWSIpPermissionInbound)-[:MEMBER_OF_EC2_SECURITY_GROUP]->(sg:EC2SecurityGroup)
-MATCH (sg)<-[:MEMBER_OF_EC2_SECURITY_GROUP|NETWORK_INTERFACE*..2]-(instance:EC2Instance)
-WHERE (instance.id = $value
+MATCH (instance:EC2Instance)
+WHERE instance.id = $value
     OR instance.instanceid = $value
     OR instance.name = $value
     OR instance.publicipaddress = $value
-    OR instance.publicdnsname = $value)
-  AND cidr.range IN ['0.0.0.0/0', '::/0']
+    OR instance.publicdnsname = $value
+CALL {
+  WITH instance
+  MATCH (instance)-[:MEMBER_OF_EC2_SECURITY_GROUP]->(sg:EC2SecurityGroup)
+  RETURN sg
+  UNION
+  WITH instance
+  MATCH (instance)-[:NETWORK_INTERFACE]->(:NetworkInterface)-[:MEMBER_OF_EC2_SECURITY_GROUP]->(sg:EC2SecurityGroup)
+  RETURN sg
+}
+MATCH (cidr:AWSIpRange)-[:MEMBER_OF_IP_RULE]->(rule:AWSIpPermissionInbound)-[:MEMBER_OF_EC2_SECURITY_GROUP]->(sg)
+WHERE cidr.range IN ['0.0.0.0/0', '::/0']
 RETURN instance.id AS instance_id,
        instance.name AS instance_name,
        instance.publicipaddress AS public_ip,
@@ -132,6 +141,7 @@ WHERE lb.id = $value
    OR lb.arn = $value
 OPTIONAL MATCH (lb)-[:ELBV2_LISTENER]->(listener:ELBV2Listener)
 OPTIONAL MATCH (lb)-[:MEMBER_OF_EC2_SECURITY_GROUP]->(sg:EC2SecurityGroup)<-[:MEMBER_OF_EC2_SECURITY_GROUP]-(rule:AWSIpPermissionInbound)<-[:MEMBER_OF_IP_RULE]-(cidr:AWSIpRange)
+WHERE cidr.range IN ['0.0.0.0/0', '::/0']
 OPTIONAL MATCH (lb)-[r_expose:EXPOSE]->(target)
 RETURN lb.id AS load_balancer_id,
        lb.name AS load_balancer_name,
@@ -198,7 +208,7 @@ MATCH (cluster:EKSCluster)
 WHERE cluster.id = $value
    OR cluster.name = $value
    OR cluster.arn = $value
-OPTIONAL MATCH (cluster)-[r_cluster]-(k8s:KubernetesCluster)
+OPTIONAL MATCH (cluster)-[r_cluster:MAPS_TO]->(k8s:KubernetesCluster)
 RETURN cluster.id AS eks_cluster_id,
        cluster.name AS eks_cluster_name,
        cluster.arn AS eks_cluster_arn,
