@@ -178,29 +178,38 @@ CALL {
   MATCH (lb:AWSLoadBalancerV2:LoadBalancer)
   WHERE lb.id = $value OR lb.name = $value OR lb.dnsname = $value
   MATCH (lb)-[r_expose:EXPOSE]->(private_ip:EC2PrivateIp)<-[:PRIVATE_IP_ADDRESS]-(eni:NetworkInterface)<-[:NETWORK_INTERFACE]-(task:ECSTask)
-  RETURN lb, r_expose, private_ip, eni, task
+  RETURN lb, r_expose, private_ip, eni, task, null AS matched_service, null AS matched_container
   UNION
   MATCH (task:ECSTask)
   WHERE task.id = $value OR task.arn = $value
   MATCH (lb:AWSLoadBalancerV2:LoadBalancer)-[r_expose:EXPOSE]->(private_ip:EC2PrivateIp)<-[:PRIVATE_IP_ADDRESS]-(eni:NetworkInterface)<-[:NETWORK_INTERFACE]-(task)
-  RETURN lb, r_expose, private_ip, eni, task
+  RETURN lb, r_expose, private_ip, eni, task, null AS matched_service, null AS matched_container
   UNION
   MATCH (service:ECSService)
   WHERE service.id = $value OR service.name = $value
   MATCH (service)-[:HAS_TASK]->(task:ECSTask)
   MATCH (lb:AWSLoadBalancerV2:LoadBalancer)-[r_expose:EXPOSE]->(private_ip:EC2PrivateIp)<-[:PRIVATE_IP_ADDRESS]-(eni:NetworkInterface)<-[:NETWORK_INTERFACE]-(task)
-  RETURN lb, r_expose, private_ip, eni, task
+  RETURN lb, r_expose, private_ip, eni, task, service AS matched_service, null AS matched_container
   UNION
   MATCH (container:ECSContainer)
   WHERE container.id = $value OR container.arn = $value OR container.name = $value
   MATCH (task:ECSTask)-[:HAS_CONTAINER]->(container)
   MATCH (lb:AWSLoadBalancerV2:LoadBalancer)-[r_expose:EXPOSE]->(private_ip:EC2PrivateIp)<-[:PRIVATE_IP_ADDRESS]-(eni:NetworkInterface)<-[:NETWORK_INTERFACE]-(task)
-  RETURN lb, r_expose, private_ip, eni, task
+  RETURN lb, r_expose, private_ip, eni, task, null AS matched_service, container AS matched_container
+  UNION
+  MATCH (container:ECSContainer)
+  WHERE container.id = $value OR container.arn = $value OR container.name = $value
+  MATCH (container)-[:WORKLOAD_PARENT]->(task:ECSTask)
+  MATCH (lb:AWSLoadBalancerV2:LoadBalancer)-[r_expose:EXPOSE]->(private_ip:EC2PrivateIp)<-[:PRIVATE_IP_ADDRESS]-(eni:NetworkInterface)<-[:NETWORK_INTERFACE]-(task)
+  RETURN lb, r_expose, private_ip, eni, task, null AS matched_service, container AS matched_container
 }
 OPTIONAL MATCH (task)-[:HAS_CONTAINER]->(container_from_task:ECSContainer)
 OPTIONAL MATCH (container_from_parent:ECSContainer)-[:WORKLOAD_PARENT]->(task)
-WITH lb, r_expose, private_ip, eni, task, coalesce(container_from_task, container_from_parent) AS container
-OPTIONAL MATCH (task)-[:WORKLOAD_PARENT]->(service:ECSService)
+WITH lb, r_expose, private_ip, eni, task, matched_service,
+     coalesce(matched_container, container_from_task, container_from_parent) AS container
+OPTIONAL MATCH (task)-[:WORKLOAD_PARENT]->(service_from_task:ECSService)
+WITH lb, r_expose, private_ip, eni, task, container,
+     coalesce(matched_service, service_from_task) AS service
 RETURN lb.id AS load_balancer_id,
        lb.name AS load_balancer_name,
        lb.dnsname AS load_balancer_dnsname,
