@@ -97,11 +97,12 @@ Use for EC2 instances, public IPs, and "which security group/rule exposes this" 
 
 ```cypher
 MATCH (instance:EC2Instance)
-WHERE instance.id = $value
+WHERE (instance.id = $value
     OR instance.instanceid = $value
     OR instance.name = $value
     OR instance.publicipaddress = $value
-    OR instance.publicdnsname = $value
+    OR instance.publicdnsname = $value)
+  AND (instance.publicipaddress IS NOT NULL OR instance.publicdnsname IS NOT NULL)
 CALL {
   WITH instance
   MATCH (instance)-[:MEMBER_OF_EC2_SECURITY_GROUP]->(sg:EC2SecurityGroup)
@@ -173,11 +174,29 @@ For classic ELB, validate the classic labels and run the same shape with `AWSLoa
 Use when a load balancer or ECS container/service/task is the suspected exposure path. This reconstructs the common ALB/NLB to private IP to ECS task/container chain when direct `LoadBalancer-[:EXPOSE]->Container` edges are absent.
 
 ```cypher
-MATCH (lb:AWSLoadBalancerV2:LoadBalancer)-[r_expose:EXPOSE]->(private_ip:EC2PrivateIp)<-[:PRIVATE_IP_ADDRESS]-(eni:NetworkInterface)<-[:NETWORK_INTERFACE]-(task:ECSTask)
-WHERE lb.id = $value
-   OR lb.name = $value
-   OR lb.dnsname = $value
-   OR task.id = $value
+CALL {
+  MATCH (lb:AWSLoadBalancerV2:LoadBalancer)
+  WHERE lb.id = $value OR lb.name = $value OR lb.dnsname = $value
+  MATCH (lb)-[r_expose:EXPOSE]->(private_ip:EC2PrivateIp)<-[:PRIVATE_IP_ADDRESS]-(eni:NetworkInterface)<-[:NETWORK_INTERFACE]-(task:ECSTask)
+  RETURN lb, r_expose, private_ip, eni, task
+  UNION
+  MATCH (task:ECSTask)
+  WHERE task.id = $value OR task.arn = $value
+  MATCH (lb:AWSLoadBalancerV2:LoadBalancer)-[r_expose:EXPOSE]->(private_ip:EC2PrivateIp)<-[:PRIVATE_IP_ADDRESS]-(eni:NetworkInterface)<-[:NETWORK_INTERFACE]-(task)
+  RETURN lb, r_expose, private_ip, eni, task
+  UNION
+  MATCH (service:ECSService)
+  WHERE service.id = $value OR service.name = $value
+  MATCH (service)-[:HAS_TASK]->(task:ECSTask)
+  MATCH (lb:AWSLoadBalancerV2:LoadBalancer)-[r_expose:EXPOSE]->(private_ip:EC2PrivateIp)<-[:PRIVATE_IP_ADDRESS]-(eni:NetworkInterface)<-[:NETWORK_INTERFACE]-(task)
+  RETURN lb, r_expose, private_ip, eni, task
+  UNION
+  MATCH (container:ECSContainer)
+  WHERE container.id = $value OR container.arn = $value OR container.name = $value
+  MATCH (task:ECSTask)-[:HAS_CONTAINER]->(container)
+  MATCH (lb:AWSLoadBalancerV2:LoadBalancer)-[r_expose:EXPOSE]->(private_ip:EC2PrivateIp)<-[:PRIVATE_IP_ADDRESS]-(eni:NetworkInterface)<-[:NETWORK_INTERFACE]-(task)
+  RETURN lb, r_expose, private_ip, eni, task
+}
 OPTIONAL MATCH (task)-[:HAS_CONTAINER]->(container_from_task:ECSContainer)
 OPTIONAL MATCH (container_from_parent:ECSContainer)-[:WORKLOAD_PARENT]->(task)
 WITH lb, r_expose, private_ip, eni, task, coalesce(container_from_task, container_from_parent) AS container
@@ -237,8 +256,8 @@ WHERE api.id = $value
    OR api.execution_arn = $value
 OPTIONAL MATCH (api)-[:ASSOCIATED_WITH]->(stage:APIGatewayStage)
 OPTIONAL MATCH (api)-[:RESOURCE]->(resource:APIGatewayResource)
-OPTIONAL MATCH (resource)<-[:HAS_METHOD]-(method:APIGatewayMethod)
-OPTIONAL MATCH (resource)<-[:HAS_INTEGRATION]-(integration:APIGatewayIntegration)
+OPTIONAL MATCH (resource)-[:HAS_METHOD]->(method:APIGatewayMethod)
+OPTIONAL MATCH (resource)-[:HAS_INTEGRATION]->(integration:APIGatewayIntegration)
 RETURN api.id AS api_id,
        api.name AS api_name,
        api.endpoint_type AS endpoint_type,
