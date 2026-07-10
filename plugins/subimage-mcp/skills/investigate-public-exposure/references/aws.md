@@ -204,9 +204,17 @@ CALL {
   RETURN lb, r_expose, private_ip, eni, task, null AS matched_service, container AS matched_container
 }
 OPTIONAL MATCH (task)-[:HAS_CONTAINER]->(container_from_task:ECSContainer)
+WHERE matched_container IS NULL
 OPTIONAL MATCH (container_from_parent:ECSContainer)-[:WORKLOAD_PARENT]->(task)
-WITH lb, r_expose, private_ip, eni, task, matched_service,
-     coalesce(matched_container, container_from_task, container_from_parent) AS container
+WHERE matched_container IS NULL
+WITH lb, r_expose, private_ip, eni, task, matched_service, matched_container,
+     collect(DISTINCT container_from_task) + collect(DISTINCT container_from_parent) AS discovered_containers
+UNWIND CASE
+         WHEN matched_container IS NOT NULL THEN [matched_container]
+         WHEN size(discovered_containers) > 0 THEN discovered_containers
+         ELSE [null]
+       END AS container
+WITH DISTINCT lb, r_expose, private_ip, eni, task, matched_service, container
 OPTIONAL MATCH (task)-[:WORKLOAD_PARENT]->(service_from_task:ECSService)
 WITH lb, r_expose, private_ip, eni, task, container,
      coalesce(matched_service, service_from_task) AS service
