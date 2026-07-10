@@ -42,7 +42,7 @@ Ask for a missing value only when needed:
 - Call `subimageReadMe` once per session before using SubImage MCP tools.
 - Call `subimageListModules` early. If a relevant module is disabled, degraded, stale, or still syncing, report that coverage limitation.
 - Use `subimage-mcp:build-cypher-query` discipline. Schema-validate labels, properties, and relationship examples with `subimageGetNodesSchema` and `searchModelQueries` before trusting a template.
-- Starting-point Cypher templates live in `references/cypher-templates.md`. Treat them as probes, not proof, until adjusted to the live schema.
+- Use `references/cypher-templates.md` only as a routing index, then load just the relevant provider or query-family file. Treat templates as probes, not proof, until adjusted to the live schema.
 - Prefer provider-independent ontology pivots when they exist: `PublicIP`, `LoadBalancer`, `DNSRecord`, `ObjectStorage`, `Function`, `Database`, `ComputeInstance`, `ComputeCluster`, `ComputeService`, `ComputePod`, `Container`, and `Snapshot`.
 - Provider analysis fields such as `exposed_internet`, `exposed_internet_type`, `_ont_public`, `anonymous_access`, and `anonymous_actions` are useful evidence, but they are not always enough to explain the cause. Reconstruct the raw path when the user asks "why".
 - `EXPOSE` edges identify a front-door-to-target path, but they are not proof that the front door is public. Check the exposing node's publicness, scheme, listener, security-rule path, and relationship metadata before using the edge as public-exposure evidence.
@@ -217,7 +217,7 @@ Use an in-chat provenance report. Tag resources with `[[entity:<Label>:<id>|<nam
 
 ## References
 
-- Public exposure Cypher templates: [`references/cypher-templates.md`](references/cypher-templates.md).
+- Cypher template routing index: [`references/cypher-templates.md`](references/cypher-templates.md). Load only the relevant linked file.
 - Query discipline: `subimage-mcp:build-cypher-query`.
 - Ownership lookup before exposure cause: `subimage-mcp:investigate-ip`.
 - Impact pivot after cause is proven: `subimage-mcp:review-attack-path`.
