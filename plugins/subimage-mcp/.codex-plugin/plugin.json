@@ -34,6 +34,11 @@
 		"category": "Security",
 		"capabilities": ["Interactive"],
 		"websiteURL": "https://subimage.io",
+		"privacyPolicyURL": "https://www.subimage.io/trust/privacy/",
+		"termsOfServiceURL": "https://www.subimage.io/trust/dpa/",
+		"brandColor": "#008CFF",
+		"logo": "./assets/logo.svg",
+		"composerIcon": "./assets/logo.svg",
 		"defaultPrompt": [
 			"Triage new SubImage findings.",
 			"Investigate a CVE in SubImage.",

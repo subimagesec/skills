@@ -1,0 +1,32 @@
+{
+	"name": "subimage-mcp",
+	"displayName": "SubImage MCP",
+	"version": "0.1.0",
+	"description": "Operator workflows over the SubImage MCP server: triage findings, investigate CVEs, audit IAM privilege, investigate containers and clusters, resolve IP/domain ownership, explain public exposure causes, review attack paths, audit SubImage coverage, build Cypher queries, and author tenant-local custom rules.",
+	"author": {
+		"name": "SubImage",
+		"email": "support@subimage.io",
+		"url": "https://subimage.io"
+	},
+	"homepage": "https://skills.subimage.io/#subimage-mcp",
+	"repository": "https://github.com/subimagesec/skills",
+	"license": "MIT",
+	"keywords": [
+		"subimage",
+		"cnapp",
+		"mcp",
+		"findings",
+		"cve",
+		"iam",
+		"container",
+		"kubernetes",
+		"ip",
+		"dns",
+		"public-exposure",
+		"attack-path",
+		"cypher",
+		"neo4j"
+	],
+	"logo": "assets/logo.svg",
+	"skills": "./skills/"
+}

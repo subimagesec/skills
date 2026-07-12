@@ -1,6 +1,6 @@
 # subimage-mcp
 
-Operator workflows over the [SubImage](https://subimage.io) MCP server. Each skill orchestrates a multi-tool flow : findings triage, CVE deep dive, attack-path review, IAM / container / IP investigations, coverage audit, Cypher query authoring, custom rule authoring.
+Operator workflows over the [SubImage](https://subimage.io) MCP server. Each skill orchestrates a multi-tool flow: findings triage, CVE deep dive, attack-path review, IAM / container / IP investigations, coverage audit, Cypher query authoring, custom rule authoring.
 
 ## Install
 
@@ -45,7 +45,7 @@ The `subimageReadMe` MCP tool injects the global tool-selection guide into the c
 
 Every skill follows the same shape:
 
-1. **Required inputs** : the agent asks the user for the CVE id, asset id, framework slug, etc. It never invents values.
-2. **Anti-patterns** : behaviors the agent will gravitate toward but should not (markdown tables on tool data, auto-pivoting without consent, walking 5+ paths in one response).
-3. **Output template** : a markdown skeleton so multiple invocations produce comparable artifacts.
-4. **Hand-off hooks** : skills explicitly chain into siblings (CVE -> attack path, coverage -> setup) and tell the user when to switch.
+1. **Required inputs**: the agent asks the user for the CVE id, asset id, framework slug, etc. It never invents values.
+2. **Anti-patterns**: behaviors the agent will gravitate toward but should not (markdown tables on tool data, auto-pivoting without consent, walking 5+ paths in one response).
+3. **Output template**: a markdown skeleton so multiple invocations produce comparable artifacts.
+4. **Hand-off hooks**: skills explicitly chain into siblings (CVE -> attack path, coverage -> setup) and tell the user when to switch.
