@@ -1,5 +1,5 @@
 {
-	"$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+	"$schema": "https://json.schemastore.org/claude-code-marketplace.json",
 	"name": "subimage",
 	"description": "Skills for AI agents working with SubImage, the cloud-native security platform. Setup recipes for IaC repos and operator workflows over the SubImage MCP server.",
 	"owner": {

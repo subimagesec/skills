@@ -19,7 +19,7 @@ This is the bridge between IaC reality and SubImage observability. Most other sk
 
 ✅ User opens this skill in their IaC or scripts repo and wants a coverage audit.
 ✅ User just enabled a new module and wants to know which findings now light up.
-✅ User wants this on a recurring cadence (weekly scheduled agent on the IaC repo).
+✅ User wants this on a recurring cadence (weekly recurring prompt on the IaC repo).
 ✅ Onboarding of a new tenant: catches what was forgotten.
 
 ❌ User wants to actually connect a specific module: this skill diagnoses; the `subimage-setup:connect-<module>` skills do the work. This skill should hand off.

@@ -37,13 +37,13 @@ Open **Preferences** -> **Cursor Settings** -> **Rules, Skills, Subagents**, the
 
 ## Prerequisites
 
-None on the SubImage side : these skills generate the IaC / CLI artifacts; they do not require an authenticated SubImage tenant connection. To **verify** the result after deploying, install [`subimage-mcp`](../subimage-mcp/) and run `subimageListModules` against your tenant.
+None on the SubImage side: these skills generate the IaC / CLI artifacts; they do not require an authenticated SubImage tenant connection. To **verify** the result after deploying, install [`subimage-mcp`](../subimage-mcp/) and run `subimageListModules` against your tenant.
 
 ## Conventions
 
 Every skill follows the same shape:
 
-1. **Required inputs** : the agent asks the user for tenant slug, account ids, etc. It never invents values or pastes literal `{{...}}` placeholders.
-2. **Gotchas** : environment-specific facts that defy reasonable assumptions (StackSet skipping the management account, Helm-vs-Docker `?ephemeral=true` quirk, Reader-vs-Entra split, etc.).
+1. **Required inputs**: the agent asks the user for tenant slug, account ids, etc. It never invents values or pastes literal `{{...}}` placeholders.
+2. **Gotchas**: environment-specific facts that defy reasonable assumptions (StackSet skipping the management account, Helm-vs-Docker `?ephemeral=true` quirk, Reader-vs-Entra split, etc.).
 3. **Multiple paths** when several deployment styles are valid; the recommended path is marked.
-4. **Verification** : a concrete CLI check the user can run before declaring the skill done.
+4. **Verification**: a concrete CLI check the user can run before declaring the skill done.
