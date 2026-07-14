@@ -40,9 +40,9 @@ arn:aws:iam::<TENANT_ACCOUNT_ID>:role/<TENANT_ID>-subimage-readonly
 `SubImageScanRole` needs:
 
 - AWS managed policy `arn:aws:iam::aws:policy/SecurityAudit`
-- Inline policies for SSO read, EKS identity read, ECR read (full JSON in path A and B below)
+- Inline policies for SSO read, EKS identity read, public SSM parameter read, and ECR read (full JSON in every path below)
 
-`SecurityAudit` already covers most discovery actions including `eks:DescribeCluster` and `eks:ListAccessEntries`. The inline additions cover SSO assignments, EKS identity provider configs, and ECR image pulls used by the image scanner.
+`SecurityAudit` already covers most discovery actions including `eks:DescribeCluster` and `eks:ListAccessEntries`. The inline additions cover SSO assignments, EKS identity provider configs, AWS-managed public SSM parameters, and ECR image pulls used by the image scanner.
 
 ## Gotchas
 
@@ -50,6 +50,7 @@ Read these before generating any commands; they correct the most common wrong as
 
 - **Service-managed StackSets skip the management account.** Targeting the org root is not enough. Deploy a standalone stack on the management account separately if you want it scanned.
 - **`SecurityAudit` is broad but not complete.** It covers `eks:DescribeCluster` and `eks:ListAccessEntries`. The inline `AllowEKSIdentityRead` adds only the three actions that are missing (`DescribeAccessEntry`, `ListIdentityProviderConfigs`, `DescribeIdentityProviderConfig`). Do not duplicate or you make the policy harder to audit.
+- **Public SSM parameter reads need an explicit permission.** `SecurityAudit` does not include `ssm:GetParametersByPath`. Scope `AllowPublicSSMParameterRead` to the accountless `/aws/service/...` public parameter hierarchy so SubImage can ingest its default Bottlerocket and EKS optimized AMI recommendation paths.
 - **Principal ARN format is non-obvious.** It is `arn:aws:iam::<TENANT_ACCOUNT_ID>:role/<TENANT_ID>-subimage-readonly`. The role name is `<TENANT_ID>-subimage-readonly`, NOT `subimage-readonly` or `<tenant>-readonly`. Copying the wrong form means the trust policy passes `terraform plan` but every sync fails with `AccessDenied`.
 - **Service-managed StackSets need org-level prerequisites.** AWS Organizations must be set up with all-features enabled and trusted access for CloudFormation StackSets. If `create-stack-set --permission-model SERVICE_MANAGED` fails with "trusted access is not enabled", run `aws organizations enable-aws-service-access --service-principal=stacksets.cloudformation.amazonaws.com` first.
 - **IAM is global; pick one StackSet region.** The role gets created once per account regardless of how many regions you target. Use `us-east-1` and stop. Multi-region targeting on an IAM-only stack just multiplies the work.
@@ -101,6 +102,13 @@ Deploys the role into every existing and future account in the organization. Ser
                      - ecr:GetDownloadUrlForLayer
                      - ecr:BatchGetImage
                    Resource: '*'
+           - PolicyName: AllowPublicSSMParameterRead
+             PolicyDocument:
+               Version: '2012-10-17'
+               Statement:
+                 - Effect: Allow
+                   Action: ssm:GetParametersByPath
+                   Resource: !Sub 'arn:${AWS::Partition}:ssm:*::parameter/aws/service/*'
            - PolicyName: AllowSSORead
              PolicyDocument:
                Version: '2012-10-17'
@@ -213,6 +221,21 @@ resource "aws_iam_role_policy" "subimage_ecr_read" {
   })
 }
 
+data "aws_partition" "current" {}
+
+resource "aws_iam_role_policy" "subimage_public_ssm_parameter_read" {
+  name = "AllowPublicSSMParameterRead"
+  role = aws_iam_role.subimage_scan_role.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = "ssm:GetParametersByPath"
+      Resource = "arn:${data.aws_partition.current.partition}:ssm:*::parameter/aws/service/*"
+    }]
+  })
+}
+
 resource "aws_iam_role_policy" "subimage_sso_read" {
   name = "AllowSSORead"
   role = aws_iam_role.subimage_scan_role.id
@@ -279,6 +302,13 @@ aws iam put-role-policy \
   --policy-name AllowECRRead \
   --policy-document '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["ecr:GetAuthorizationToken","ecr:BatchCheckLayerAvailability","ecr:GetDownloadUrlForLayer","ecr:BatchGetImage"],"Resource":"*"}]}'
 
+AWS_PARTITION=$(aws sts get-caller-identity --query Arn --output text | cut -d: -f2)
+
+aws iam put-role-policy \
+  --role-name SubImageScanRole \
+  --policy-name AllowPublicSSMParameterRead \
+  --policy-document "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":\"ssm:GetParametersByPath\",\"Resource\":\"arn:${AWS_PARTITION}:ssm:*::parameter/aws/service/*\"}]}"
+
 aws iam put-role-policy \
   --role-name SubImageScanRole \
   --policy-name AllowSSORead \
@@ -316,6 +346,7 @@ Look for `aws` with `status: synced` and a recent `lastSyncEndedAt`.
 
 - **`AccessDenied` on `sts:AssumeRole`**: trust policy does not list the SubImage principal ARN, or you copied a placeholder literal. Re-run path A/B/C with the substituted `<TENANT_ACCOUNT_ID>` / `<TENANT_ID>`.
 - **`AccessDenied` on a service action**: managed policy missing or inline policy missing. Confirm `SecurityAudit` is attached and the inline policies above are present.
+- **`AccessDenied` on `ssm:GetParametersByPath`**: add or update `AllowPublicSSMParameterRead`. If the AWS module uses public parameter prefixes outside `/aws/service/...`, scope the policy to those exact accountless parameter ARNs too.
 - **Management account missing from scans, StackSet otherwise healthy**: expected. Service-managed StackSets skip the management account; deploy the standalone stack there.
 
 ## References
