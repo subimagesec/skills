@@ -10,5 +10,6 @@
 	},
 	"homepage": "https://skills.subimage.io/#subimage-mcp",
 	"repository": "https://github.com/subimagesec/skills",
-	"license": "MIT"
+	"license": "MIT",
+	"mcpServers": "./mcp/claude.json"
 }

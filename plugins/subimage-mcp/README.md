@@ -39,7 +39,11 @@ Open **Preferences** -> **Cursor Settings** -> **Rules, Skills, Subagents**, the
 | [`subimage-mcp:build-cypher-query`](./skills/build-cypher-query/SKILL.md) | Construct a verified Cypher query against the SubImage Neo4j graph by exploring the schema, reusing model queries, and validating with bounded probes. |
 | [`subimage-mcp:create-custom-rule`](./skills/create-custom-rule/SKILL.md) | Draft, validate against the live tenant graph, and persist a tenant-local custom Cypher rule via `subimageCreateCustomRule`. |
 
-The `subimageReadMe` MCP tool injects the global tool-selection guide into the conversation on first call; these skills layer recipe-style multi-tool flows on top of it. See [MCP setup](https://app.subimage.io/docs/agents/connect_via_mcp) to wire the server into your client.
+## MCP server
+
+This plugin ships the SubImage MCP server config (`https://app.subimage.io/mcp`, streamable HTTP), so installing it wires the server into your client automatically. On first use your browser opens for OAuth; only users added to your SubImage tenant on the Team settings page can authenticate. No token is stored in the plugin. See [connect via MCP](https://docs.subimage.io/docs/agents/connect_via_mcp) for manual setup and machine-to-machine tokens.
+
+The `subimageReadMe` MCP tool injects the global tool-selection guide into the conversation on first call; these skills layer recipe-style multi-tool flows on top of it.
 
 ## Conventions
 
