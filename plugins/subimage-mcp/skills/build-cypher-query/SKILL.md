@@ -93,6 +93,7 @@ Do not run the final query if a dedicated non-Cypher tool has already returned a
 
 The query passed to `subimageRunCypher` must:
 
+- be read-only. Only MATCH, OPTIONAL MATCH, WHERE, WITH, UNWIND, RETURN, ORDER BY, LIMIT, and read-only procedures (e.g. `apoc.meta.*`) are allowed. Never CREATE, MERGE, DELETE, SET, REMOVE, DROP, or any writing/virtual APOC procedure (`apoc.create.*`, including `apoc.create.vNode` / `apoc.create.vRelationship`): the graph role rejects them and the query will fail.
 - use only validated labels, properties, and relationships,
 - give every node variable at least one label (no bare `MATCH (n)`); unlabeled scans touch the entire graph and time out,
 - give every relationship pattern a variable and an explicit type (e.g. `(a)-[r1:RELATES_TO]->(b)`; never `(a)-[:RELATES_TO]->(b)` or `(a)-[]->(b)`),
@@ -131,6 +132,7 @@ Simplify before running:
 - Looping speculative probes ("try this, no, try that"). One probe with `LIMIT 5` or `COUNT(*)`, then commit.
 - Pre-loading the full schema "just in case" via `subimageListModuleSchemaNodes` on every module. Only enumerate modules when the labels are genuinely unknown.
 - Calling `subimageGetLabelStats` for every query. Only check when a label is plausibly large and your query does not already filter it.
+- Building virtual nodes or relationships (`apoc.create.vNode` / `apoc.create.vRelationship`) to "visualize" a derived relationship. The graph access is read-only; RETURN the endpoint rows (the two ids plus the connecting fields) and let the UI render them instead.
 
 ## Special cases
 
