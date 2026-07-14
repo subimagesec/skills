@@ -13,7 +13,7 @@ Lists SubImage's security rules, groups the ones with findings by tag (theme/cat
 
 ✅ User asks for a findings digest, triage, or "what's new".
 ✅ User wants to know which findings are most urgent or which framework is most off-track.
-✅ Used as the body of a scheduled agent for a daily/weekly security brief.
+✅ Used as a recurring prompt for a daily/weekly security brief.
 
 ❌ User asks about a specific CVE: use `subimage-mcp:investigate-cve` instead.
 ❌ User asks about a specific attack path: use `subimage-mcp:review-attack-path`.
@@ -124,4 +124,3 @@ Never auto-send without explicit confirmation. The digest is most useful as a ch
 ## References
 
 - Tool guide (always loaded by `subimageReadMe`): see Domain 5 "Compliance & Security Findings" and Domain 6 "Ticket Management". Note `subimageListRules` returns per-rule `tags` and takes no `framework` argument.
-- Scheduled agents (where this skill is most useful as a recurring prompt): https://app.subimage.io/docs/agents/scheduled_agents

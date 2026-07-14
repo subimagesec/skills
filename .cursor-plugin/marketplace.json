@@ -1,0 +1,23 @@
+{
+	"name": "subimage",
+	"owner": {
+		"name": "SubImage",
+		"email": "support@subimage.io"
+	},
+	"metadata": {
+		"description": "Agent skills for SubImage, the cloud-native security platform: onboarding cloud/SaaS data sources and operator workflows over the SubImage MCP server.",
+		"version": "0.1.0"
+	},
+	"plugins": [
+		{
+			"name": "subimage-setup",
+			"source": "./plugins/subimage-setup",
+			"description": "Onboard cloud and SaaS data sources into SubImage from your IaC or CLI environment (AWS, GCP, Azure, GitHub, Kubernetes outpost)."
+		},
+		{
+			"name": "subimage-mcp",
+			"source": "./plugins/subimage-mcp",
+			"description": "Operator workflows over the SubImage MCP server: triage findings, investigate CVEs, review attack paths, audit coverage, and author Cypher queries and custom rules."
+		}
+	]
+}

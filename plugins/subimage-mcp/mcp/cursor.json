@@ -1,0 +1,8 @@
+{
+	"mcpServers": {
+		"subimage": {
+			"type": "streamableHttp",
+			"url": "https://app.subimage.io/mcp"
+		}
+	}
+}
