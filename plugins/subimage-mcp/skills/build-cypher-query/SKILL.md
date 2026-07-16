@@ -99,8 +99,6 @@ The query passed to `subimageRunCypher` must:
 - give every relationship pattern a variable and an explicit type (e.g. `(a)-[r1:RELATES_TO]->(b)`; never `(a)-[:RELATES_TO]->(b)` or `(a)-[]->(b)`),
 - use the schema-declared direction for every relationship. If a cached model query or draft uses the opposite arrow, correct it before execution and note the correction in prose if useful.
 - include `LIMIT`, default `LIMIT 100` unless the user asks otherwise,
-- return only the needed fields, not whole nodes,
-- always include `n.id` (or the equivalent identity property) in the `RETURN` clause for every matched node so results can be cross-referenced,
 - use `OPTIONAL MATCH` only when missing relationships should still preserve rows,
 - never use unbounded variable-length paths.
 
@@ -113,7 +111,6 @@ Simplify before running:
 
 - remove unnecessary hops, `WITH`, `OPTIONAL MATCH`,
 - prefer direct properties over extra traversal,
-- return only the columns the user asked for.
 
 ## Execution rules
 
@@ -132,7 +129,7 @@ Simplify before running:
 - Looping speculative probes ("try this, no, try that"). One probe with `LIMIT 5` or `COUNT(*)`, then commit.
 - Pre-loading the full schema "just in case" via `subimageListModuleSchemaNodes` on every module. Only enumerate modules when the labels are genuinely unknown.
 - Calling `subimageGetLabelStats` for every query. Only check when a label is plausibly large and your query does not already filter it.
-- Building virtual nodes or relationships (`apoc.create.vNode` / `apoc.create.vRelationship`) to "visualize" a derived relationship. The graph access is read-only; RETURN the endpoint rows (the two ids plus the connecting fields) and let the UI render them instead.
+- Building virtual nodes or relationships (`apoc.create.vNode` / `apoc.create.vRelationship`) to "visualize" a derived relationship.
 
 ## Special cases
 
