@@ -57,6 +57,8 @@ Never describe a deployment or build repository as IaC without additional eviden
 - GitHub secret values and GitLab variable values are not ingested.
 - The graph does not generically model Terraform, OpenTofu, or Pulumi files, plans,
   states, modules, or resources.
+- Summarize `subimageRunCypher` output for the user; do not reprint it as a markdown
+  table (the tool already streams an interactive table).
 
 ## Workflow
 
@@ -86,73 +88,57 @@ that source). Gating map:
 | CircleCI | `circleci` |
 | AWS CodeBuild | `aws` |
 | Semgrep opportunistic file evidence | `semgrep` |
-| Image counterevidence (`Image`-[:PACKAGED_FROM]->repo) | the container/image module |
+| Image counterevidence (`Image`-[:PACKAGED_FROM]->repo) | any registry-image module: `aws`, `gcp`, `scaleway`, `github`, or `gitlab` |
 
-Confirm the exact slug against the live `subimageListModules` output; if a search's
-module slug is not present, skip that search.
+Confirm the exact slug against the live `subimageListModules` output; if none of a
+search's module slugs is present, skip that search. The image counterevidence search
+runs when any one of its listed modules is enabled.
 
-### Step 3: Labels and relationships
+### Step 3: Query rules
 
-Every label, relationship, and direction used below was checked against the SubImage
-Cartography schema. `CodeRepository` is a semantic ontology label carried by both
+Every query below follows the `subimage-mcp:build-cypher-query` contract (labeled
+nodes, typed and directed relationships, `LIMIT`, ids returned, one statement per
+call). `CodeRepository` is a semantic ontology label carried by both
 `GitHubRepository` and `GitLabProject`, so matching `(:CodeRepository)` spans both
-providers. The schema-confirmed directed patterns are:
+providers.
 
-- `(:GitHubRepository)-[:LANGUAGE]->(:ProgrammingLanguage)`
-- `(:GitHubRepository)-[:HAS_WORKFLOW]->(:GitHubWorkflow)`
-- `(:GitHubWorkflow)-[:USES_ACTION]->(:GitHubAction)`
-- `(:GitHubWorkflow)-[:REFERENCES_SECRET]->(:GitHubActionsSecret)`
-- `(:GitHubRepository)-[:HAS_VARIABLE]->(:GitHubActionsVariable)`
-- `(:GitHubRepository)-[:HAS_SECRET]->(:GitHubActionsSecret)`
-- `(:GitHubRepository)-[:HAS_ENVIRONMENT]->(:GitHubEnvironment)` and
-  `(:GitLabProject)-[:HAS_ENVIRONMENT]->(:GitLabEnvironment)`
-- `(:GitHubRepository)-[:ASSUMED_ROLE_WITH_WEB_IDENTITY]->(:AWSRole)`
-- `(:SpaceliftStack)-[:GENERATED]->(:SpaceliftRun)`,
-  `(:SpaceliftRun)-[:AFFECTED]->(...)`, `(:SpaceliftStack)-[:ASSUMES]->(:AWSRole)`
-- `(:GitLabProject)-[:RESOURCE]->(:GitLabCIConfig)`,
-  `(:GitLabCIConfig)-[:USES_INCLUDE]->(:GitLabCIInclude)`,
-  `(:GitLabCIConfig)-[:REFERENCES_VARIABLE]->(:GitLabCIVariable)`
-- `(:CircleCIProject)-[:BUILDS]->(:CodeRepository)`,
-  `(:CircleCIProject)-[:RESOURCE]->(:CircleCIPipeline)`
-- `(:SemgrepSASTFinding|:SemgrepSecretsFinding)-[:FOUND_IN]->(:CodeRepository)`
-- `(:Image)-[:PACKAGED_FROM]->(:CodeRepository)`
-
-Schema still varies by tenant and module version, so if a query errors or returns
-nothing on a given tenant, confirm the labels with
+The templates are written against the current schema, but labels vary by tenant and
+module version. Validate a template's labels and relationships with
 `subimageGetNodesSchema(node_names=[...])` (and `searchModelQueries` for a cached
-query of the same shape) and adjust to what the live schema reports. Do not invent a
-label, relationship, direction, or property that the schema does not list.
+query of the same shape) before relying on it, and always when a query errors or
+returns nothing; adjust to what the live schema reports. Do not invent a label,
+relationship, direction, or property.
 
-See `subimage-mcp:build-cypher-query` for the full query rules; every query in this
-skill follows them:
-
-- every node variable carries a label (no bare `MATCH (n)`);
-- every relationship has a variable and an explicit type
-  (`(r)-[hw:HAS_WORKFLOW]->(w)`, never `-[:HAS_WORKFLOW]->` or `-[]->`);
-- use the schema-declared direction;
-- include `LIMIT` (default 100), return only needed fields, always return the node
-  `id`;
-- use `OPTIONAL MATCH` only where a missing relationship should still keep the row;
-- one statement per `subimageRunCypher`, and no `//` comments in the query string.
+**Paginate every query.** `LIMIT` caps a single page, not the result set. Order by a
+stable key and page until a page returns fewer rows than the page size; never treat
+the first page as the complete result. On large tenants the repository and evidence
+counts routinely exceed one page, so a single `LIMIT 100` silently drops most of the
+graph.
 
 ### Step 4: Inventory repositories
 
+Filter archived repositories in the `WHERE` (before the page limit, so they do not
+consume a page) and page on the stable `r.id` key. Start with `cursor = ""` (sorts
+before every id) and pass the last `id` from the previous page on each next call,
+until a page returns fewer than the page size.
+
 ```cypher
 MATCH (r:CodeRepository)
+WHERE NOT coalesce(r._ont_archived, r.archived, false)
+  AND r.id > $cursor
 RETURN
   labels(r) AS labels,
   r.id AS id,
   coalesce(r._ont_fullname, r.fullname, r.path_with_namespace, r.name) AS repository,
   coalesce(r._ont_url, r.url, r.web_url) AS url,
-  coalesce(r._ont_archived, r.archived, false) AS archived,
   r._module_name AS source_module,
   r.lastupdated AS lastupdated
-ORDER BY repository
-LIMIT 100
+ORDER BY r.id
+LIMIT 500
 ```
 
-Normally exclude archived or disabled repositories. Report one only when an active
-resource is still attributed to it.
+This excludes archived repositories from the inventory. If you specifically need to
+flag an archived repository that still owns an active resource, query that separately.
 
 ### Step 5: Spacelift attribution (module `spacelift`)
 
@@ -161,7 +147,7 @@ Spacelift provides the strongest signal in the current data model.
 ```cypher
 MATCH (s:SpaceliftStack)
 OPTIONAL MATCH (s)-[gen:GENERATED]->(run:SpaceliftRun)
-OPTIONAL MATCH (run)-[aff:AFFECTED]->(resource)
+OPTIONAL MATCH (run)-[aff:AFFECTED]->(resource:AWSEC2Instance)
 OPTIONAL MATCH (s)-[asr:ASSUMES]->(role:AWSRole)
 RETURN
   s.id AS stack_id,
@@ -315,13 +301,16 @@ LIMIT 100
 **AWS CodeBuild** (module `aws`). No direct relationship to `CodeRepository`;
 normalize `source_location` against known repositories.
 
+Return environment variable **names only**; do not select `environment_variables`
+directly, as it carries plaintext values.
+
 ```cypher
 MATCH (project:AWSCodeBuildProject)
 RETURN
   project.name AS project,
   project.source_type AS source_type,
   project.source_location AS source_location,
-  project.environment_variables AS environment_variables,
+  [entry IN coalesce(project.environment_variables, []) | split(entry, "=")[0]] AS environment_variable_names,
   project.region AS region
 LIMIT 100
 ```
@@ -329,35 +318,42 @@ LIMIT 100
 ### Step 9: Semgrep opportunistic evidence (module `semgrep`)
 
 A finding can reveal an IaC path; the absence of a finding does not mean the file is
-absent. `SemgrepSASTFinding` and `SemgrepSecretsFinding` both carry the ontology label
-`SecurityIssue`, so seed the scan on that label (a label scan, never a bare
-`MATCH (finding)`) and narrow to the two Semgrep types in the `WHERE`.
+absent. The two finding labels carry different fields: `SemgrepSASTFinding` uses
+`file_path` and `rule_id`, while `SemgrepSecretsFinding` uses `finding_path` (which
+includes a trailing `:line`, so strip it before matching) and `rule_hash_id`. Normalize
+each concrete label in its own branch, then `UNION`.
 
 ```cypher
-MATCH (finding:SecurityIssue)-[fi:FOUND_IN]->(repo:CodeRepository)
-WHERE (finding:SemgrepSASTFinding OR finding:SemgrepSecretsFinding)
-WITH repo,
-  coalesce(finding.file_path, finding.finding_path) AS path,
-  finding.rule_id AS rule_id,
-  finding.type AS finding_type
-WHERE toLower(path) ENDS WITH ".tf"
-  OR toLower(path) CONTAINS "terragrunt"
-  OR toLower(path) ENDS WITH "chart.yaml"
-  OR toLower(path) ENDS WITH "values.yaml"
-  OR toLower(path) ENDS WITH "kustomization.yaml"
-  OR toLower(path) CONTAINS "pulumi"
+MATCH (finding:SemgrepSASTFinding)-[fi:FOUND_IN]->(repo:CodeRepository)
+WITH repo, toLower(finding.file_path) AS path, finding.rule_id AS rule, "sast" AS finding_type
+WHERE path ENDS WITH ".tf"
+  OR path CONTAINS "terragrunt"
+  OR path ENDS WITH "chart.yaml"
+  OR path ENDS WITH "values.yaml"
+  OR path ENDS WITH "kustomization.yaml"
+  OR path CONTAINS "pulumi"
 RETURN
   coalesce(repo._ont_fullname, repo.fullname, repo.path_with_namespace) AS repository,
-  collect(DISTINCT {path: path, rule: rule_id, type: finding_type}) AS evidence
-ORDER BY repository
-LIMIT 100
+  collect(DISTINCT {path: path, rule: rule, type: finding_type}) AS evidence
+UNION
+MATCH (finding:SemgrepSecretsFinding)-[fi:FOUND_IN]->(repo:CodeRepository)
+WITH repo, toLower(split(finding.finding_path, ":")[0]) AS path, finding.rule_hash_id AS rule, finding.type AS finding_type
+WHERE path ENDS WITH ".tf"
+  OR path CONTAINS "terragrunt"
+  OR path ENDS WITH "chart.yaml"
+  OR path ENDS WITH "values.yaml"
+  OR path ENDS WITH "kustomization.yaml"
+  OR path CONTAINS "pulumi"
+RETURN
+  coalesce(repo._ont_fullname, repo.fullname, repo.path_with_namespace) AS repository,
+  collect(DISTINCT {path: path, rule: rule, type: finding_type}) AS evidence
 ```
 
 ### Step 10: Counterevidence (image/container module)
 
 The ontology edge is `(:Image)-[:PACKAGED_FROM]->(:CodeRepository)` (provider-native
-variants such as `(:AWSECRRepositoryImage)-[:PACKAGED_FROM]->(:GitHubRepository)` also
-exist; matching on the `Image` / `CodeRepository` ontology labels covers them).
+variants such as `(:AWSECRImage)-[:PACKAGED_FROM]->(:GitHubRepository)` also exist;
+matching on the `Image` / `CodeRepository` ontology labels covers them).
 
 ```cypher
 MATCH (image:Image)-[pf:PACKAGED_FROM]->(repo:CodeRepository)
@@ -425,21 +421,11 @@ Except for Spacelift, never assign high or medium confidence from only one famil
 
 ## Response format
 
-```markdown
-## High confidence
-- `owner/repository`: Terraform cloud infrastructure. HCL plus
-  `hashicorp/setup-terraform` and observed AWS OIDC role use.
-
-## Medium confidence
-- `owner/repository`: Kubernetes configuration. Helm chart language and Helm
-  release workflows.
-
-## Low confidence
-- `owner/repository`: Possible deployment automation. AWS credentials action and
-  `id-token: write`, but no direct IaC signal.
-```
-
-Omit empty confidence sections. If no candidate reaches low confidence, return:
+Group candidates under `## High confidence`, `## Medium confidence`, and
+`## Low confidence` headings, one bullet per repository with a one-line evidence
+summary (for example: "`owner/repo`: Terraform cloud infrastructure. HCL plus
+`hashicorp/setup-terraform` and observed AWS OIDC role use."). Omit any heading that
+has no candidates. If none reach low confidence, return exactly:
 
 ```text
 No IaC repository candidates were found in the available graph data.
@@ -447,18 +433,6 @@ No IaC repository candidates were found in the available graph data.
 
 Never claim to have seen file contents when the evidence came only from a language,
 action, finding, or variable name.
-
-## Anti-patterns
-
-- Running searches for modules that are not enabled. Gate on `subimageListModules`
-  and skip disabled sources silently.
-- Reconstructing module coverage with Cypher instead of `subimageListModules`.
-- Treating `SpaceliftStack.repository` as a relationship to `CodeRepository`. It is a
-  string; normalize and resolve it.
-- Calling a deployment or build repository "IaC" on a single credentials/OIDC signal.
-- Displaying secret or variable values. Names only.
-- Saving to memory before the user confirms, or prescribing a specific save tool.
-- Reformatting `subimageRunCypher` results as a markdown table. Summarize the rows.
 
 ## References
 
