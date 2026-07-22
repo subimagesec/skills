@@ -45,9 +45,8 @@ LIMIT 50
 Use this when you have an affected image digest and need to prove the package is on that image.
 
 ```cypher
-MATCH (i:Image)-[r]-(p:TrivyPackage {name:'<PACKAGE_NAME>'})
-WHERE i.digest = '<IMAGE_DIGEST>'
-  AND coalesce(p.version, p.installed_version, '') = '<PACKAGE_VERSION>'
+MATCH (p:TrivyPackage {name:'<PACKAGE_NAME>'})-[r:DEPLOYED]->(i:Image {digest:'<IMAGE_DIGEST>'})
+WHERE coalesce(p.version, p.installed_version, '') = '<PACKAGE_VERSION>'
 RETURN labels(i) AS image_labels, i.digest AS image_digest, type(r) AS rel_type, p.purl AS purl
 LIMIT 20
 ```
@@ -57,16 +56,18 @@ LIMIT 20
 Use this when a CVE is in scope. It ties the CVE finding and package to the exact image layer.
 
 ```cypher
-MATCH (f:TrivyImageFinding {cve_id:'<CVE_ID>'})--(p:TrivyPackage {name:'<PACKAGE_NAME>'})
-MATCH (i:Image)--(f)
-WHERE i.digest = '<IMAGE_DIGEST>'
-  AND coalesce(p.version, p.installed_version, '') = '<PACKAGE_VERSION>'
+MATCH (f:TrivyImageFinding {cve_id:'<CVE_ID>'})-[:AFFECTS]->(p:TrivyPackage {name:'<PACKAGE_NAME>'})
+MATCH (f)-[:AFFECTS]->(i:Image {digest:'<IMAGE_DIGEST>'})
+WHERE coalesce(p.version, p.installed_version, '') = '<PACKAGE_VERSION>'
+OPTIONAL MATCH (i)-[:HAS_LAYER]->(layer:ImageLayer {diff_id: f.layer_diff_id})
 RETURN p.purl AS purl,
        f.layer_diff_id AS finding_layer_diff_id,
        f.layer_digest AS finding_layer_digest,
        i.digest AS image_digest,
        i.source_file AS source_file,
        i.source_revision AS source_revision,
+       CASE WHEN layer IS NULL THEN [] ELSE labels(layer) END AS layer_labels,
+       left(coalesce(layer.history, ''), 1000) AS layer_history_prefix,
        i.layer_diff_ids[0] AS layer0,
        i.layer_diff_ids[1] AS layer1,
        i.layer_diff_ids[2] AS layer2
@@ -82,9 +83,12 @@ MATCH (i:Image {digest:'<IMAGE_DIGEST>'})
 UNWIND range(0, size(i.layer_diff_ids) - 1) AS idx
 WITH i, idx, i.layer_diff_ids[idx] AS layer_diff_id
 WHERE layer_diff_id = '<LAYER_DIFF_ID>'
+OPTIONAL MATCH (i)-[:HAS_LAYER]->(layer:ImageLayer {diff_id: layer_diff_id})
 RETURN i.digest AS image_digest,
        idx AS layer_index,
        layer_diff_id AS layer_diff_id,
+       CASE WHEN layer IS NULL THEN [] ELSE labels(layer) END AS layer_labels,
+       left(coalesce(layer.history, ''), 1000) AS layer_history_prefix,
        i.source_file AS source_file,
        i.source_revision AS source_revision
 LIMIT 10
@@ -95,20 +99,32 @@ LIMIT 10
 Use this to inspect the Docker history entry for the layer. The history text usually shows whether the layer came from a parent runtime image, package-manager install, or app build command.
 
 ```cypher
-MATCH (l:ECRImageLayer)
-WHERE l.diff_id = '<LAYER_DIFF_ID>'
-   OR l.id = '<LAYER_DIFF_ID>'
-   OR l.id = '<LAYER_DIGEST>'
-   OR l.digest = '<LAYER_DIGEST>'
-RETURN l.diff_id AS diff_id,
-       l.id AS id,
-       left(l.history, 1000) AS history_prefix
+MATCH (i:Image {digest:'<IMAGE_DIGEST>'})
+OPTIONAL MATCH (i)-[:HAS_LAYER]->(layer:ImageLayer {diff_id:'<LAYER_DIFF_ID>'})
+OPTIONAL MATCH (fallback:ImageLayer {diff_id:'<LAYER_DIFF_ID>'})
+WHERE layer IS NOT NULL OR '<LAYER_DIFF_ID>' IN coalesce(i.layer_diff_ids, [])
+WITH i, coalesce(layer, fallback) AS layer
+RETURN i.digest AS image_digest,
+       CASE WHEN layer IS NULL THEN [] ELSE labels(layer) END AS layer_labels,
+       layer.diff_id AS diff_id,
+       layer.id AS id,
+       layer.digest AS compressed_digest,
+       left(coalesce(layer.history, ''), 1000) AS history_prefix
 LIMIT 5
 ```
 
 ## Shared layer count
 
 Use this to support a base-image classification. A layer reused by many images is usually parent image/runtime tooling; a layer unique to one service is more likely app-owned.
+
+```cypher
+MATCH (layer:ImageLayer {diff_id:'<LAYER_DIFF_ID>'})<-[:HAS_LAYER]-(i:Image)
+RETURN count(DISTINCT i) AS image_count,
+       collect(DISTINCT i.source_file)[0..10] AS sample_source_files
+LIMIT 1
+```
+
+If that returns zero but the image has `layer_diff_ids`, fall back to the array form for providers or older tenants without `HAS_LAYER`:
 
 ```cypher
 MATCH (i:Image)
@@ -124,10 +140,17 @@ Use this when no CVE finding exists but you have an image digest and need nearby
 
 ```cypher
 MATCH (i:Image {digest:'<IMAGE_DIGEST>'})
+OPTIONAL MATCH (i)-[:HAS_LAYER]->(layer:ImageLayer)
+WITH i,
+     collect(DISTINCT CASE WHEN layer IS NULL THEN NULL ELSE {
+       diff_id: layer.diff_id,
+       history_prefix: left(coalesce(layer.history, ''), 240)
+     } END) AS layer_nodes
 RETURN i.digest AS image_digest,
        i.source_file AS source_file,
        i.source_revision AS source_revision,
        i.layer_diff_ids[0..8] AS first_layers,
-       size(i.layer_diff_ids) AS layer_count
+       size(i.layer_diff_ids) AS layer_count,
+       [layer_node IN layer_nodes WHERE layer_node IS NOT NULL][0..8] AS first_layer_nodes
 LIMIT 10
 ```
