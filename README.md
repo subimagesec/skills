@@ -66,6 +66,7 @@ After install, skills are namespaced under their plugin:
 /subimage-mcp:improve-subimage-coverage
 /subimage-mcp:build-cypher-query
 /subimage-mcp:create-custom-rule
+/subimage-mcp:identify-iac-repositories
 ```
 
 Most are **model-invocable**: the agent picks them up automatically from the description when the user phrasing matches. You can also call any of them by name as a slash command.
@@ -109,6 +110,7 @@ plugins/
       improve-subimage-coverage/SKILL.md
       build-cypher-query/SKILL.md
       create-custom-rule/SKILL.md
+      identify-iac-repositories/SKILL.md
 ```
 
 ## Contributing
