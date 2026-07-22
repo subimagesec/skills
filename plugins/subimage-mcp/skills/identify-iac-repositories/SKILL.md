@@ -88,11 +88,11 @@ that source). Gating map:
 | CircleCI | `circleci` |
 | AWS CodeBuild | `aws` |
 | Semgrep opportunistic file evidence | `semgrep` |
-| Image counterevidence (`Image`-[:PACKAGED_FROM]->repo) | any registry-image module: `aws`, `gcp`, `scaleway`, `github`, or `gitlab` |
 
-Confirm the exact slug against the live `subimageListModules` output; if none of a
-search's module slugs is present, skip that search. The image counterevidence search
-runs when any one of its listed modules is enabled.
+Confirm the exact slug against the live `subimageListModules` output; if a search's
+module slug is not present, skip that search. The image counterevidence search (Step
+10) is not gated: run it unconditionally, since it simply returns no rows when no image
+data is present.
 
 ### Step 3: Query rules
 
@@ -349,7 +349,10 @@ RETURN
   collect(DISTINCT {path: path, rule: rule, type: finding_type}) AS evidence
 ```
 
-### Step 10: Counterevidence (image/container module)
+### Step 10: Counterevidence (ungated)
+
+Run this unconditionally; it returns no rows when no image data is present.
+
 
 The ontology edge is `(:Image)-[:PACKAGED_FROM]->(:CodeRepository)` (provider-native
 variants such as `(:AWSECRImage)-[:PACKAGED_FROM]->(:GitHubRepository)` also exist;
