@@ -68,7 +68,7 @@ Load [`references/cypher-templates.md`](references/cypher-templates.md), validat
 4. Layer position and history.
 5. Shared-layer count, when deciding base image versus app layer.
 
-Prefer `(:Image)-[:HAS_LAYER]->(:ImageLayer)` for layer membership, history, and shared-layer counts when the relationship exists. Keep `Image.layer_diff_ids` for ordinal position and as a fallback for providers or older tenants that have layer arrays without `HAS_LAYER`. Use bounded, read-only `subimageRunCypher` calls. If a relationship direction is uncertain, use the undirected diagnostic templates in the reference, then summarize the direction you observed. Do not run broad unlabeled scans.
+Use the layer relationship pattern returned by `subimageGetNodesSchema`; use `(:Image)-[:HAS_LAYER]->(:ImageLayer)` only when the schema confirms that direction. Keep `Image.layer_diff_ids` for ordinal position and as a fallback for providers or older tenants that have layer arrays without `HAS_LAYER`. If direction remains uncertain, run the reference's typed probe anchored to one image digest, then use the observed direction in the final query. Do not run broad unlabeled scans.
 
 ### 4. Classify origin
 
