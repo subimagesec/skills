@@ -321,11 +321,21 @@ A finding can reveal an IaC path; the absence of a finding does not mean the fil
 absent. The two finding labels carry different fields: `SemgrepSASTFinding` uses
 `file_path` and `rule_id`, while `SemgrepSecretsFinding` uses `finding_path` (which
 includes a trailing `:line`, so strip it before matching) and `rule_hash_id`. Normalize
-each concrete label in its own branch, then `UNION`.
+each concrete label in its own `UNION` branch inside a `CALL` subquery, then aggregate,
+order, and page on the combined result (a trailing `ORDER BY`/`LIMIT` after a bare
+`UNION` would bind only the last branch).
 
 ```cypher
-MATCH (finding:SemgrepSASTFinding)-[fi:FOUND_IN]->(repo:CodeRepository)
-WITH repo, toLower(finding.file_path) AS path, finding.rule_id AS rule, "sast" AS finding_type
+CALL {
+  MATCH (finding:SemgrepSASTFinding)-[fi:FOUND_IN]->(repo:CodeRepository)
+  WITH repo, toLower(finding.file_path) AS path, finding.rule_id AS rule, "sast" AS finding_type
+  RETURN repo, path, rule, finding_type
+  UNION
+  MATCH (finding:SemgrepSecretsFinding)-[fi:FOUND_IN]->(repo:CodeRepository)
+  WITH repo, toLower(split(finding.finding_path, ":")[0]) AS path, finding.rule_hash_id AS rule, finding.type AS finding_type
+  RETURN repo, path, rule, finding_type
+}
+WITH repo, path, rule, finding_type
 WHERE path ENDS WITH ".tf"
   OR path CONTAINS "terragrunt"
   OR path ENDS WITH "chart.yaml"
@@ -335,24 +345,13 @@ WHERE path ENDS WITH ".tf"
 RETURN
   coalesce(repo._ont_fullname, repo.fullname, repo.path_with_namespace) AS repository,
   collect(DISTINCT {path: path, rule: rule, type: finding_type}) AS evidence
-UNION
-MATCH (finding:SemgrepSecretsFinding)-[fi:FOUND_IN]->(repo:CodeRepository)
-WITH repo, toLower(split(finding.finding_path, ":")[0]) AS path, finding.rule_hash_id AS rule, finding.type AS finding_type
-WHERE path ENDS WITH ".tf"
-  OR path CONTAINS "terragrunt"
-  OR path ENDS WITH "chart.yaml"
-  OR path ENDS WITH "values.yaml"
-  OR path ENDS WITH "kustomization.yaml"
-  OR path CONTAINS "pulumi"
-RETURN
-  coalesce(repo._ont_fullname, repo.fullname, repo.path_with_namespace) AS repository,
-  collect(DISTINCT {path: path, rule: rule, type: finding_type}) AS evidence
+ORDER BY repository
+LIMIT 100
 ```
 
 ### Step 10: Counterevidence (ungated)
 
 Run this unconditionally; it returns no rows when no image data is present.
-
 
 The ontology edge is `(:Image)-[:PACKAGED_FROM]->(:CodeRepository)` (provider-native
 variants such as `(:AWSECRImage)-[:PACKAGED_FROM]->(:GitHubRepository)` also exist;
