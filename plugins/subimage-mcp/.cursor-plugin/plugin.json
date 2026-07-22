@@ -25,7 +25,10 @@
 		"public-exposure",
 		"attack-path",
 		"cypher",
-		"neo4j"
+		"neo4j",
+		"iac",
+		"terraform",
+		"infrastructure-as-code"
 	],
 	"logo": "assets/logo.svg",
 	"skills": "./skills/",
