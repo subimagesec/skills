@@ -5,7 +5,7 @@ Agent skills marketplace for [SubImage](https://subimage.io), the cloud-native s
 Two plugins ship from this repo:
 
 - **`subimage-setup`**: onboarding recipes for cloud and SaaS data sources (AWS, GCP, Azure, GitHub, Kubernetes outpost). Terraform / CloudFormation / Helm / aws-cli / gcloud / az / gh paths. Designed to run inside an IaC or scripts repo.
-- **`subimage-mcp`**: operator workflows over the SubImage MCP server (triage findings, investigate CVEs, trace package provenance, review attack paths, audit SubImage coverage, build Cypher queries against the graph). Designed to run alongside an authenticated SubImage tenant.
+- **`subimage-mcp`**: operator workflows over the SubImage MCP server (triage findings, investigate CVEs, trace package origin, review attack paths, audit SubImage coverage, build Cypher queries against the graph). Designed to run alongside an authenticated SubImage tenant.
 
 The two are independent; install whichever your workflow needs.
 

@@ -1,9 +1,9 @@
 ---
 name: investigate-package
-description: Trace a package or dependency in SubImage from CVE or issue to package node, image, layer history, base-image versus application origin, and practical reachability. Use when the user asks "where does this package come from", "is this from the base image", "is this installed package exploitable", "trace package provenance", or "why is package X on this image".
+description: Trace a package or dependency in SubImage from CVE or issue to package node, image, layer history, base-image versus application origin, and practical reachability. Use when the user asks "where does this package come from", "is this from the base image", "is this installed package exploitable", "trace package origin", or "why is package X on this image".
 ---
 
-# Investigate package provenance
+# Investigate package origin
 
 ## What this does
 
@@ -14,7 +14,7 @@ Answers why a package exists on an image and whether "installed" means "reachabl
 ✅ User asks where a package came from after a CVE or Issue triage.
 ✅ User asks whether a vulnerable package is from the base image, parent image, runtime tooling, or app dependencies.
 ✅ User asks whether software being present on an image makes it exploitable.
-✅ User gives a package name/version, image digest/tag, CVE id, or SubImage Issue URL and wants root-cause provenance.
+✅ User gives a package name/version, image digest/tag, CVE id, or SubImage Issue URL and wants to identify where the package came from.
 
 ❌ User only wants a CVE impact summary: use `subimage-mcp:investigate-cve`.
 ❌ User only wants where an image runs: use `subimage-mcp:investigate-container`.
@@ -91,7 +91,7 @@ Check runtime code for imports, subprocess calls, archive/XML/parsing paths, exp
 ## Output
 
 ```markdown
-# Package provenance: <PACKAGE_NAME>@<PACKAGE_VERSION>
+# Package origin: <PACKAGE_NAME>@<PACKAGE_VERSION>
 
 ## Finding
 - source input: <issue/CVE/package>
@@ -116,7 +116,7 @@ Check runtime code for imports, subprocess calls, archive/XML/parsing paths, exp
 
 - Cite the exact MCP facts used: package purl, image digest, layer diff id, and layer history summary.
 - If you used repo search, cite the file hit or say no manifest hit was found.
-- If graph layer history is missing, say provenance is unresolved instead of inferring parent-image origin.
+- If graph layer history is missing, say package origin is unresolved instead of inferring parent-image origin.
 
 ## Anti-patterns
 

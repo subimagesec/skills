@@ -1,6 +1,6 @@
 # subimage-mcp
 
-Operator workflows over the [SubImage](https://subimage.io) MCP server. Each skill orchestrates a multi-tool flow: findings triage, CVE deep dive, package provenance, attack-path review, IAM / container / IP investigations, coverage audit, Cypher query authoring, custom rule authoring.
+Operator workflows over the [SubImage](https://subimage.io) MCP server. Each skill orchestrates a multi-tool flow: findings triage, CVE deep dive, package origin, attack-path review, IAM / container / IP investigations, coverage audit, Cypher query authoring, custom rule authoring.
 
 ## Install
 

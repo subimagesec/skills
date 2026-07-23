@@ -1,4 +1,4 @@
-# Package Provenance Cypher Templates
+# Package Origin Cypher Templates
 
 Starting-point queries for `investigate-package`. Validate every label, property, relationship, and direction with `subimageGetNodesSchema` before use. Keep every query read-only, filtered early, and `LIMIT`-bounded.
 
