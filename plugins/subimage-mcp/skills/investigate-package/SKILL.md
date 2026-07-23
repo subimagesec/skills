@@ -67,6 +67,8 @@ Load [`references/cypher-templates.md`](references/cypher-templates.md), validat
 3. CVE finding layer and image layer membership, when a CVE is in scope.
 4. Layer position and history.
 5. Shared-layer count, when deciding base image versus app layer.
+6. Fix versions, when the user needs the remediation target (§ Fix versions).
+7. Severity landscape, when the image's overall or per-layer finding load gives useful context (§ Severity landscape).
 
 Use the layer relationship pattern returned by `subimageGetNodesSchema`; use `(:Image)-[:HAS_LAYER]->(:ImageLayer)` only when the schema confirms that direction. Keep `Image.layer_diff_ids` for ordinal position and as a fallback for providers or older tenants that have layer arrays without `HAS_LAYER`. If direction remains uncertain, run the reference's typed probe anchored to one image digest, then use the observed direction in the final query. Do not run broad unlabeled scans.
 
@@ -79,6 +81,19 @@ Use this order:
 - **Build tooling copied into runtime**: package comes from npm/pnpm/toolchain dependencies, but the runtime image copies those directories or binaries forward.
 - **Scanner-only ambiguity**: graph has the package/finding but no usable layer history or manifest evidence. Say unresolved.
 
+To place a layer in one of those categories, read the `ImageLayer.history` (and `is_empty`) for the layer that carries the finding and match the strongest signal below. Signals are heuristics on Docker history text, not guarantees; when a layer matches more than one, prefer the most specific.
+
+| Layer signal in `history` (or `is_empty`) | Layer class | Origin reading |
+|---|---|---|
+| `debian`, `ubuntu`, `alpine`, `bookworm`, base filesystem create | base OS | inherited from the base/parent OS layer |
+| `apt-get update/upgrade/install`, `apk add`, `yum install`, `dnf install` | base-image OS packages | OS packages installed in the base/parent image |
+| `python.tar.xz`, `make install`, `lib*-dev` (e.g. `libssl-dev`, `zlib1g-dev`), `node`, `go build` | runtime build | runtime or runtime build dependency |
+| `pip install`, `uv sync`, `poetry install`, `npm install`/`npm ci`, `yarn install`, `pnpm install`, `bundle install`, `go mod download` | application dependency | application dependency install |
+| `COPY . .`, `COPY src`, `COPY app`, `ADD .` | application code | application code; not a package unless a finding links here |
+| `is_empty = true`, `WORKDIR`, `ENV`, `USER`, `CMD`, `ENTRYPOINT`, `EXPOSE`, `HEALTHCHECK` | metadata | should not introduce package debt |
+
+A finding on a base-OS or base-image-OS-packages layer points at base-image remediation; one on an application-dependency layer points at a manifest/lockfile bump. See the § Layer history template for the query that returns `history`.
+
 ### 5. Assess reachability
 
 Do not equate installed with exploitable. Say:
@@ -87,6 +102,22 @@ Do not equate installed with exploitable. Say:
 - "Reachable" means a running process loads the vulnerable code path with attacker-controlled input.
 
 Check runtime code for imports, subprocess calls, archive/XML/parsing paths, exposed upload endpoints, CLI execution, and whether the affected files are copied into the runner stage. For DoS CVEs, identify what attacker-controlled input must reach the vulnerable function. If the package is base-image tooling and no runtime path uses it, classify as real package debt with weak reachability.
+
+### 6. Grade the evidence
+
+Two scanners feed the graph: Trivy (`TrivyPackage`, `TrivyImageFinding`) and Syft (`SyftPackage`). Cross-check them against the canonical `Package` and the layer attribution, and state a confidence grade so the reader knows how much to trust the origin call:
+
+- **Strong**: canonical `Package` on the image, confirmed by both `TrivyPackage` and `SyftPackage` **for that same image**, with the finding tied to a concrete `ImageLayer` that has history. Get the two scanner confirmations from the § Scanner representations query anchored to `<IMAGE_DIGEST>` via `DEPLOYED`; a scanner detection on some other image does not qualify.
+- **Medium**: Trivy reports the package/finding and layer attribution exists, but Syft confirmation is missing.
+- **Weak**: finding is on the image, but the canonical `Package`, the Syft package, or the layer attribution is missing. Origin is inferred, not proven.
+
+Flag these mismatches explicitly rather than smoothing them over, and name the fallback you used:
+
+- Trivy reports a vulnerable package but Syft detects no matching package: possible false positive or scanner gap, hold at medium and say so.
+- Syft detects the package but no canonical `Package` link exists: report from the Syft node and note the missing normalization.
+- `Image.layer_diff_ids` is populated but `HAS_LAYER` returns nothing: use the array form (see the templates' fallback queries) and say the relationship is absent for this tenant.
+- A finding carries `layer_diff_id` but no `ImageLayer` matches it: layer history is unavailable, so origin stays unresolved.
+- A fix exists on `TrivyPackage`/finding but not on the canonical `Package` (or vice versa): report the fix version you found and which node carried it.
 
 ## Output
 
@@ -124,6 +155,7 @@ Check runtime code for imports, subprocess calls, archive/XML/parsing paths, exp
 - Calling a package "base image" only because the remediation plan says so. Prove it with layer history or say it is inferred from the remediation tool.
 - Trusting `base_image_sources` alone. It can be empty even when layer history clearly shows parent image origin.
 - Running the package neighbor query and stopping there. The layer query is what separates app-owned dependency from parent/runtime tooling.
+- Grading evidence as strong when only one scanner sees the package. Flag Trivy/Syft disagreement instead of hiding it.
 - Reformatting raw Cypher output as a table. Summarize the evidence.
 
 ## References

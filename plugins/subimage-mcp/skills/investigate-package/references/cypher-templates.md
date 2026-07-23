@@ -22,18 +22,23 @@ If the version is unknown, drop the version predicates and keep the same `LIMIT`
 
 ## Scanner representations
 
-Use this only when scanner-specific evidence matters.
+Use this only when scanner-specific evidence matters. Both the canonical package and each scanner node are anchored to the selected image through their own `DEPLOYED` edge to the same `i`, so a Trivy/Syft detection from a *different* image cannot fill either array. Requiring both scanner arrays to be non-empty from this query is the only join that supports a Strong grade (see the SKILL's "Grade the evidence" step); the unscoped `Package`-only form cannot.
 
 ```cypher
-MATCH (p:Package)
-WHERE p.name = <PACKAGE_NAME_LITERAL> AND p.version = <PACKAGE_VERSION_LITERAL>
-OPTIONAL MATCH (p)-[trivyDetected:DETECTED_AS]->(trivy:TrivyPackage)
-OPTIONAL MATCH (p)-[syftDetected:DETECTED_AS]->(syft:SyftPackage)
-RETURN p.purl AS canonical_purl,
+MATCH (p:Package)-[deployed:DEPLOYED]->(i:Image)
+WHERE p.name = <PACKAGE_NAME_LITERAL>
+  AND p.version = <PACKAGE_VERSION_LITERAL>
+  AND coalesce(i.digest, i._ont_digest) = <IMAGE_DIGEST_LITERAL>
+OPTIONAL MATCH (p)-[trivyDetected:DETECTED_AS]->(trivy:TrivyPackage)-[:DEPLOYED]->(i)
+OPTIONAL MATCH (p)-[syftDetected:DETECTED_AS]->(syft:SyftPackage)-[:DEPLOYED]->(i)
+RETURN coalesce(i.digest, i._ont_digest) AS image_digest,
+       p.purl AS canonical_purl,
        collect(DISTINCT trivy.purl)[0..10] AS trivy_purls,
        collect(DISTINCT syft.purl)[0..10] AS syft_purls
 LIMIT 20
 ```
+
+If you do not yet have an image digest, drop the `DEPLOYED`/digest predicates to see scanner coverage across all images, but treat the result as package-level only: it cannot confirm both scanners saw the package on any single image, so it does not support a Strong grade.
 
 ## Package deployed on image
 
@@ -185,4 +190,73 @@ RETURN labels(startNode(hasLayer)) AS start_labels,
        labels(endNode(hasLayer)) AS end_labels,
        layer.diff_id AS layer_diff_id
 LIMIT 5
+```
+
+## Fix versions
+
+Use this to fill the remediation target. Validate the fix relationship name/direction with `subimageGetNodesSchema` first; `APPLIES_TO` and `SHOULD_UPDATE_TO` are the observed shapes but tenants differ. Prefer the finding-anchored form when a CVE is in scope.
+
+```cypher
+MATCH (f:TrivyImageFinding)-[affectsImage:AFFECTS]->(i:Image)
+WHERE f.cve_id = <CVE_ID_LITERAL>
+  AND coalesce(i.digest, i._ont_digest) = <IMAGE_DIGEST_LITERAL>
+OPTIONAL MATCH (fix:TrivyFix)-[appliesTo:APPLIES_TO]->(f)
+OPTIONAL MATCH (f)-[affectsPackage:AFFECTS]->(p:Package)
+OPTIONAL MATCH (p)-[shouldUpdate:SHOULD_UPDATE_TO]->(pkgFix:TrivyFix)
+RETURN f.cve_id AS cve_id,
+       p.purl AS purl,
+       collect(DISTINCT fix.version)[0..10] AS finding_fix_versions,
+       collect(DISTINCT pkgFix.version)[0..10] AS package_fix_versions
+LIMIT 20
+```
+
+If no CVE is in scope, anchor on the package instead and drop the finding match:
+
+```cypher
+MATCH (p:Package)-[deployed:DEPLOYED]->(i:Image)
+WHERE p.name = <PACKAGE_NAME_LITERAL>
+  AND p.version = <PACKAGE_VERSION_LITERAL>
+  AND coalesce(i.digest, i._ont_digest) = <IMAGE_DIGEST_LITERAL>
+OPTIONAL MATCH (p)-[shouldUpdate:SHOULD_UPDATE_TO]->(pkgFix:TrivyFix)
+RETURN p.purl AS purl,
+       collect(DISTINCT pkgFix.version)[0..10] AS package_fix_versions
+LIMIT 20
+```
+
+## Severity landscape
+
+Use this for supporting context: the image's overall finding load and, optionally, which layers carry the findings. It does not change the origin call, but a package on a layer that concentrates critical/high findings is worth calling out.
+
+Per-image severity counts:
+
+```cypher
+MATCH (f:TrivyImageFinding)-[affectsImage:AFFECTS]->(i:Image)
+WHERE coalesce(i.digest, i._ont_digest) = <IMAGE_DIGEST_LITERAL>
+RETURN count(DISTINCT f) AS finding_count,
+       count(DISTINCT CASE WHEN f.severity = 'CRITICAL' THEN f END) AS critical_count,
+       count(DISTINCT CASE WHEN f.severity = 'HIGH' THEN f END) AS high_count,
+       count(DISTINCT CASE WHEN f.severity = 'MEDIUM' THEN f END) AS medium_count,
+       count(DISTINCT CASE WHEN f.severity = 'LOW' THEN f END) AS low_count
+LIMIT 1
+```
+
+Per-layer finding counts, keyed on `finding.layer_diff_id` within the image's `layer_diff_ids`:
+
+```cypher
+MATCH (i:Image)
+WHERE coalesce(i.digest, i._ont_digest) = <IMAGE_DIGEST_LITERAL>
+UNWIND range(0, size(i.layer_diff_ids) - 1) AS idx
+WITH i, idx, i.layer_diff_ids[idx] AS layer_diff_id
+OPTIONAL MATCH (f:TrivyImageFinding)-[affectsImage:AFFECTS]->(i)
+WHERE f.layer_diff_id = layer_diff_id
+WITH idx, layer_diff_id,
+     count(DISTINCT f) AS finding_count,
+     count(DISTINCT CASE WHEN f.severity IN ['CRITICAL', 'HIGH'] THEN f END) AS critical_high_count
+WHERE finding_count > 0
+RETURN idx AS layer_index,
+       layer_diff_id AS layer_diff_id,
+       finding_count AS finding_count,
+       critical_high_count AS critical_high_count
+ORDER BY idx
+LIMIT 50
 ```
