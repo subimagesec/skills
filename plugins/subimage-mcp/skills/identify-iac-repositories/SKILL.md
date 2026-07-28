@@ -109,23 +109,23 @@ query of the same shape) before relying on it, and always when a query errors or
 returns nothing; adjust to what the live schema reports. Do not invent a label,
 relationship, direction, or property.
 
-**Paginate every query.** `LIMIT` caps a single page, not the result set. Order by a
-stable key and page until a page returns fewer rows than the page size; never treat
-the first page as the complete result. On large tenants the repository and evidence
-counts routinely exceed one page, so a single `LIMIT 100` silently drops most of the
-graph.
+**Paginate every query; embed the offset as a literal.** `subimageRunCypher` takes a
+query string and does not bind parameters (`$cursor` fails with `ParameterMissing`), so
+never use a parameter. `LIMIT` caps a single page, not the result set: every template
+below has a deterministic `ORDER BY ... SKIP 0 LIMIT ...`. To page, rewrite the literal
+`SKIP` on each next call (`0`, then the page size, then twice it, ...) until a page
+returns fewer rows than the limit; never treat the first page as complete. On large
+tenants both the repository and evidence counts exceed one page, so a single unpaged
+`LIMIT 100` silently drops most of the graph.
 
 ### Step 4: Inventory repositories
 
 Filter archived repositories in the `WHERE` (before the page limit, so they do not
-consume a page) and page on the stable `r.id` key. Start with `cursor = ""` (sorts
-before every id) and pass the last `id` from the previous page on each next call,
-until a page returns fewer than the page size.
+consume a page) and page on the stable `r.id` order.
 
 ```cypher
 MATCH (r:CodeRepository)
 WHERE NOT coalesce(r._ont_archived, r.archived, false)
-  AND r.id > $cursor
 RETURN
   labels(r) AS labels,
   r.id AS id,
@@ -134,7 +134,7 @@ RETURN
   r._module_name AS source_module,
   r.lastupdated AS lastupdated
 ORDER BY r.id
-LIMIT 500
+SKIP 0 LIMIT 500
 ```
 
 This excludes archived repositories from the inventory. If you specifically need to
@@ -159,8 +159,8 @@ RETURN
   collect(DISTINCT {labels: labels(resource), id: resource.id, arn: resource.arn}) AS affected_resources,
   collect(DISTINCT role.arn) AS assumed_roles,
   count(DISTINCT run) AS observed_runs
-ORDER BY stack_name
-LIMIT 100
+ORDER BY stack_name, stack_id
+SKIP 0 LIMIT 100
 ```
 
 `SpaceliftStack.repository` is a string property, not an edge to `CodeRepository`.
@@ -182,7 +182,7 @@ RETURN
   r.primarylanguage AS primary_language,
   collect(DISTINCT language.name) AS languages
 ORDER BY repository
-LIMIT 100
+SKIP 0 LIMIT 100
 ```
 
 **Workflows, actions, and permissions.**
@@ -202,7 +202,7 @@ RETURN
   collect(DISTINCT a.full_name) AS actions,
   collect(DISTINCT secret.name) AS referenced_secret_names
 ORDER BY repository
-LIMIT 100
+SKIP 0 LIMIT 100
 ```
 
 Strong `cloud_infrastructure` actions: `hashicorp/setup-terraform`, OpenTofu or
@@ -226,7 +226,7 @@ RETURN
     first_seen: oidc.first_seen_in_time_window
   }) AS observed_oidc_roles
 ORDER BY repository
-LIMIT 100
+SKIP 0 LIMIT 100
 ```
 
 This proves observed OIDC use (stronger than `id-token: write`), but it does not
@@ -245,7 +245,7 @@ RETURN
   collect(DISTINCT secret.name) AS secret_names,
   collect(DISTINCT environment.name) AS environments
 ORDER BY repository
-LIMIT 100
+SKIP 0 LIMIT 100
 ```
 
 Names such as `TF_*`, `TERRAFORM_*`, `AWS_*`, `ARM_*`, `AZURE_*`, `GOOGLE_*`,
@@ -270,7 +270,7 @@ RETURN
   collect(DISTINCT variable.key) AS referenced_variable_names,
   collect(DISTINCT environment.name) AS environments
 ORDER BY repository
-LIMIT 100
+SKIP 0 LIMIT 100
 ```
 
 Look for Terraform, OpenTofu, Pulumi, Helm, Kustomize, Argo CD, or Flux in
@@ -295,7 +295,8 @@ RETURN
     config_path: pipeline.config_source_file_path,
     checkout_repo: pipeline.checkout_source_repo_full_name
   }) AS pipelines
-LIMIT 100
+ORDER BY project
+SKIP 0 LIMIT 100
 ```
 
 **AWS CodeBuild** (module `aws`). No direct relationship to `CodeRepository`;
@@ -312,7 +313,8 @@ RETURN
   project.source_location AS source_location,
   [entry IN coalesce(project.environment_variables, []) | split(entry, "=")[0]] AS environment_variable_names,
   project.region AS region
-LIMIT 100
+ORDER BY project
+SKIP 0 LIMIT 100
 ```
 
 ### Step 9: Semgrep opportunistic evidence (module `semgrep`)
@@ -346,7 +348,7 @@ RETURN
   coalesce(repo._ont_fullname, repo.fullname, repo.path_with_namespace) AS repository,
   collect(DISTINCT {path: path, rule: rule, type: finding_type}) AS evidence
 ORDER BY repository
-LIMIT 100
+SKIP 0 LIMIT 100
 ```
 
 ### Step 10: Counterevidence (ungated)
@@ -364,8 +366,8 @@ RETURN
   repo.id AS id,
   count(DISTINCT image) AS produced_images,
   collect(DISTINCT pf.match_method) AS match_methods
-ORDER BY produced_images DESC
-LIMIT 100
+ORDER BY produced_images DESC, repository
+SKIP 0 LIMIT 100
 ```
 
 Producing images usually indicates `artifact_build` or an application repo. It is not
