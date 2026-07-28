@@ -1,6 +1,6 @@
 # subimage-mcp
 
-Operator workflows over the [SubImage](https://subimage.io) MCP server. Each skill orchestrates a multi-tool flow: findings triage, CVE deep dive, attack-path review, IAM / container / IP investigations, coverage audit, Cypher query authoring, custom rule authoring.
+Operator workflows over the [SubImage](https://subimage.io) MCP server. Each skill orchestrates a multi-tool flow: findings triage, CVE deep dive, package origin, attack-path review, IAM / container / IP investigations, coverage audit, Cypher query authoring, custom rule authoring.
 
 ## Install
 
@@ -30,6 +30,7 @@ Open **Preferences** -> **Cursor Settings** -> **Rules, Skills, Subagents**, the
 |---|---|
 | [`subimage-mcp:triage-new-findings`](./skills/triage-new-findings/SKILL.md) | Findings digest grouped by tag/theme (rules listed directly), with recommended next steps. |
 | [`subimage-mcp:investigate-cve`](./skills/investigate-cve/SKILL.md) | Full impact, EPSS/KEV context, and fixability for a specific CVE, with opt-in internet enrichment and a pivot to attack-path exploration. |
+| [`subimage-mcp:investigate-package`](./skills/investigate-package/SKILL.md) | Trace a package from issue/CVE to image layer, classify base-image versus app origin, and assess runtime reachability. |
 | [`subimage-mcp:investigate-iam`](./skills/investigate-iam/SKILL.md) | IAM privilege audit: admin-equivalent identities, assume-role / cross-account trust chains, and PermissionSet effective permissions. |
 | [`subimage-mcp:investigate-container`](./skills/investigate-container/SKILL.md) | Image provenance, Kubernetes/EKS cluster exposure, and EKS node-count reconciliation (three modes). |
 | [`subimage-mcp:investigate-ip`](./skills/investigate-ip/SKILL.md) | Resolve IP/domain ownership across cloud resources, trace the DNS chain, and attribute public IPs (ASN/geo/VPN-proxy-Tor) via `subimageEnrichIp`. |

@@ -17,7 +17,7 @@
 		{
 			"name": "subimage-mcp",
 			"source": "./plugins/subimage-mcp",
-			"description": "Operator workflows over the SubImage MCP server: triage findings, investigate CVEs, review attack paths, audit coverage, author Cypher queries and custom rules, and identify Infrastructure-as-Code repositories."
+			"description": "Operator workflows over the SubImage MCP server: triage findings, investigate CVEs, trace package origin, review attack paths, audit coverage, author Cypher queries and custom rules, and identify Infrastructure-as-Code repositories."
 		}
 	]
 }

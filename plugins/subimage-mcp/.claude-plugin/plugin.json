@@ -2,7 +2,7 @@
 	"$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
 	"name": "subimage-mcp",
 	"displayName": "SubImage MCP",
-	"description": "Operator workflows over the SubImage MCP server: triage findings, investigate CVEs, audit IAM privilege, investigate containers and clusters, resolve IP/domain ownership, explain public exposure causes, review attack paths, audit SubImage coverage, build Cypher queries, author tenant-local custom rules, and identify Infrastructure-as-Code repositories.",
+	"description": "Operator workflows over the SubImage MCP server: triage findings, investigate CVEs, trace package origin, audit IAM privilege, investigate containers and clusters, resolve IP/domain ownership, explain public exposure causes, review attack paths, audit SubImage coverage, build Cypher queries, author tenant-local custom rules, and identify Infrastructure-as-Code repositories.",
 	"version": "0.1.0",
 	"author": {
 		"name": "SubImage",
