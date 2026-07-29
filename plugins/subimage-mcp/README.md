@@ -39,6 +39,7 @@ Open **Preferences** -> **Cursor Settings** -> **Rules, Skills, Subagents**, the
 | [`subimage-mcp:improve-subimage-coverage`](./skills/improve-subimage-coverage/SKILL.md) | Scan the current repo for providers, cross-reference with `subimageListModules`, then list rules with findings and surface the top actionable ones grouped by tag. |
 | [`subimage-mcp:build-cypher-query`](./skills/build-cypher-query/SKILL.md) | Construct a verified Cypher query against the SubImage Neo4j graph by exploring the schema, reusing model queries, and validating with bounded probes. |
 | [`subimage-mcp:create-custom-rule`](./skills/create-custom-rule/SKILL.md) | Draft, validate against the live tenant graph, and persist a tenant-local custom Cypher rule via `subimageCreateCustomRule`. |
+| [`subimage-mcp:identify-iac-repositories`](./skills/identify-iac-repositories/SKILL.md) | Identify and rank the repositories that manage Infrastructure as Code, gated on enabled modules, grouped by confidence, and saved to memory on confirmation. |
 
 ## MCP server
 
