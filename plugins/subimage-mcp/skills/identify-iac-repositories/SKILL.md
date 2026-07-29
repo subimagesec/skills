@@ -116,7 +116,9 @@ below has a deterministic `ORDER BY ... SKIP 0 LIMIT ...`. To page, rewrite the 
 `SKIP` on each next call (`0`, then the page size, then twice it, ...) until a page
 returns fewer rows than the limit; never treat the first page as complete. On large
 tenants both the repository and evidence counts exceed one page, so a single unpaged
-`LIMIT 100` silently drops most of the graph.
+`LIMIT 100` silently drops most of the graph. Keep the page size at `100`:
+`subimageRunCypher` previews at most 100 rows, so a larger `LIMIT` would still return
+100 and make the "fewer than the limit" stop condition fire after the first page.
 
 ### Step 4: Inventory repositories
 
@@ -134,7 +136,7 @@ RETURN
   r._module_name AS source_module,
   r.lastupdated AS lastupdated
 ORDER BY r.id
-SKIP 0 LIMIT 500
+SKIP 0 LIMIT 100
 ```
 
 This excludes archived repositories from the inventory. If you specifically need to
