@@ -39,6 +39,7 @@ Read these before generating any commands; they correct the most common wrong as
 - **Classic PAT scope `repo` is broader than SubImage needs.** It grants write access to repos. SubImage uses read paths only, but the PAT is over-privileged from a least-privilege standpoint. On GitHub.com / Enterprise Cloud, prefer the App. PATs are the right answer only on Enterprise Server or where the App cannot be installed.
 - **GHES URL is the GraphQL endpoint, not the REST one.** `github_url` for an Enterprise Server install is `https://<host>/api/graphql`, not `https://<host>/api/v3` or `https://<host>`. Wrong URL produces "endpoint not found" errors that look like network problems but are configuration problems.
 - **Do not generate or accept tokens for the user.** The user must paste the token directly into SubImage's secret field (or store it in AWS Secrets Manager and paste the ARN). Treat anyone offering a raw token in chat as a credential-handling violation.
+- **A Secrets Manager ARN needs the separate Secrets account setup.** `SubImageScanRole` does not grant secret access. Before using an ARN, configure the account and `SubImageSecretsRole` as described below.
 
 ## Path A: GitHub App (recommended for GitHub.com and Enterprise Cloud)
 
@@ -109,6 +110,17 @@ Use this only for GitHub Enterprise Server, or for orgs where the App cannot be 
 
 You can mix App and PAT auth in the same tenant: orgs with an App install go through the App, the rest through the PAT.
 
+### AWS Secrets Manager option
+
+If the user chooses an ARN instead of SubImage's managed secret field:
+
+1. Open SubImage → **Settings → Configuration** and save the AWS account ID that owns the secret.
+2. Copy the SubImage-generated External ID.
+3. Deploy `SubImageSecretsRole` in that account with a trust-policy `sts:ExternalId` condition matching the copied value.
+4. Paste the secret ARN into `github_access_token`.
+
+SubImage supports one Secrets account per tenant. The managed secret field does not require this AWS setup.
+
 ## Verification
 
 After install or PAT save, run a sync from SubImage → **Modules → github → Run Sync**. Then in any MCP-connected AI client:
@@ -148,4 +160,5 @@ GH_TOKEN=<your-token> gh api /user
 ## References
 
 - Canonical doc: https://app.subimage.io/docs/modules/github
+- Secrets account setup: https://app.subimage.io/docs/secrets
 - Integrations overview: https://app.subimage.io/docs/integrations

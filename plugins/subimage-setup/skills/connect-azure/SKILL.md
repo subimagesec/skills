@@ -46,6 +46,7 @@ Read these before generating any commands; they correct the most common wrong as
 - **Client secrets expire.** Default expiry on `az ad sp create-for-rbac` is 1 year. Pre-create with `--years <N>` matching the customer's rotation policy, or queue a rotation reminder.
 - **`Reader` does not allow listing role assignments by default in some hardened Azure configurations.** If `subimageListModules` shows azure stuck in `permission_denied` despite the role being attached, ask the user whether their tenant restricts `Microsoft.Authorization/roleAssignments/read` and add `User Access Administrator` (read-only via custom role) only if needed.
 - **Do not pass the placeholder strings.** `<TENANT_DIRECTORY_ID>`, `<SUBSCRIPTION_IDS>`, `<APP_ID>`, `<CLIENT_SECRET>` must be substituted. `az` will reject obviously-malformed UUIDs but will sometimes accept partial garbage and fail later in unhelpful ways.
+- **A Secrets Manager ARN needs the separate Secrets account setup.** `SubImageScanRole` does not grant secret access. Before using an ARN for the client secret, configure the account and `SubImageSecretsRole` as described below.
 
 ## Path A: az CLI
 
@@ -146,6 +147,17 @@ terraform output -raw subimage_client_secret
    - `azure_sync_all_subscriptions`: `true` to scan every sub the SP can see, `false` to scan only the ones you bound.
 3. Save and **Run Sync**.
 
+### AWS Secrets Manager option
+
+If the user chooses an ARN instead of SubImage's managed secret field:
+
+1. Open SubImage → **Settings → Configuration** and save the AWS account ID that owns the secret.
+2. Copy the SubImage-generated External ID.
+3. Deploy `SubImageSecretsRole` in that account with a trust-policy `sts:ExternalId` condition matching the copied value.
+4. Paste the secret ARN into `azure_client_secret`.
+
+SubImage supports one Secrets account per tenant. The managed secret field does not require this AWS setup.
+
 ## Verification
 
 ```bash
@@ -177,4 +189,5 @@ Look for `azure` with `status: synced`.
 ## References
 
 - Canonical doc: https://app.subimage.io/docs/modules/azure
+- Secrets account setup: https://app.subimage.io/docs/secrets
 - Microsoft module (Entra + Intune): https://app.subimage.io/docs/modules/microsoft
