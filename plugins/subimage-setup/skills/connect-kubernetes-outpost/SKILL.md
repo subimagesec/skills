@@ -125,10 +125,10 @@ Advanced options (RBAC tuning, corporate proxy, network policies, pod security, 
 
 ### Path B: Docker
 
-Pin an explicit image version rather than `:latest`, so restarts and rebuilds are reproducible and upgrades are deliberate. Before deploying, check the published tags at https://github.com/subimagesec/subimage-outpost/pkgs/container/subimage-outpost and set `OUTPOST_VERSION` to the newest release; `1.2.0` below (shipped by chart 1.4.0) is only the version current when this skill was written.
+Pin an explicit image version rather than `:latest`, so restarts and rebuilds are reproducible and upgrades are deliberate. Before deploying, check the published tags at https://github.com/subimagesec/subimage-outpost/pkgs/container/subimage-outpost and substitute the newest release below. Do not ship the placeholder, and do not assume `1.2.0` (current when this skill was written, shipped by chart 1.4.0) is still the newest.
 
 ```bash
-OUTPOST_VERSION=1.2.0
+OUTPOST_VERSION=<newest-release-tag>
 
 docker pull ghcr.io/subimagesec/subimage-outpost:${OUTPOST_VERSION}
 
@@ -224,7 +224,7 @@ helm upgrade subimage-outpost subimage/subimage-outpost -f values.yaml
 Docker:
 
 ```bash
-OUTPOST_VERSION=<newest-release-tag>   # from the package page linked in Step 3
+OUTPOST_VERSION=<newest-release-tag>   # check the package page linked in Step 3
 
 docker pull ghcr.io/subimagesec/subimage-outpost:${OUTPOST_VERSION}
 docker stop subimage-outpost && docker rm subimage-outpost
