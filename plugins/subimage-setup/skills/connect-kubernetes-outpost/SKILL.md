@@ -125,8 +125,12 @@ Advanced options (RBAC tuning, corporate proxy, network policies, pod security, 
 
 ### Path B: Docker
 
+Pin an explicit image version rather than `:latest`, so restarts and rebuilds are reproducible and upgrades are deliberate. `<OUTPOST_VERSION>` below is the release tag; the current one is `1.2.0` (shipped by chart 1.4.0), and newer tags are listed at https://github.com/subimagesec/subimage-outpost/pkgs/container/subimage-outpost.
+
 ```bash
-docker pull ghcr.io/subimagesec/subimage-outpost:latest
+OUTPOST_VERSION=1.2.0
+
+docker pull ghcr.io/subimagesec/subimage-outpost:${OUTPOST_VERSION}
 
 docker run -d \
   --name subimage-outpost \
@@ -136,7 +140,7 @@ docker run -d \
   -e NAME=<NAME> \
   -e PROXY_TARGET=<PROXY_TARGET> \
   -e VERIFY_TLS=<VERIFY_TLS> \
-  ghcr.io/subimagesec/subimage-outpost:latest
+  ghcr.io/subimagesec/subimage-outpost:${OUTPOST_VERSION}
 ```
 
 `?ephemeral=true` is mandatory here: nothing appends it on the Docker path.
@@ -146,8 +150,6 @@ Optional env vars:
 - `PROXY_HOST`: overrides the `Host` header sent to `PROXY_TARGET`. Useful when the target expects a virtual host different from the URL (e.g. `eks.internal.acme.com` while `PROXY_TARGET` is an IP).
 - `CA_BUNDLE`: path to a CA bundle inside the container, honored when `VERIFY_TLS=true`.
 - `PROXY_CONNECT_TIMEOUT` (default 15) and `PROXY_READ_TIMEOUT` (default 60), in seconds. Raise them for slow DNS or large list calls.
-
-For production stability, pin a version instead of `:latest` and roll forward intentionally. The current image release is `1.2.0` (shipped by chart 1.4.0).
 
 ## Step 4: Verify the outpost is up
 
@@ -222,9 +224,11 @@ helm upgrade subimage-outpost subimage/subimage-outpost -f values.yaml
 Docker:
 
 ```bash
-docker pull ghcr.io/subimagesec/subimage-outpost:latest
+OUTPOST_VERSION=<new-release-tag>
+
+docker pull ghcr.io/subimagesec/subimage-outpost:${OUTPOST_VERSION}
 docker stop subimage-outpost && docker rm subimage-outpost
-# Re-run the same docker run command.
+# Re-run the same docker run command with the new OUTPOST_VERSION.
 ```
 
 Settings → Outposts flags an outdated outpost version next to the hostname, which is the signal to run this.
