@@ -24,8 +24,7 @@ Outpost-eligible modules: `bigfix`, `crowdstrike`, `jamf`, `kandji`, `kubernetes
 
 Do this first. Everything else is deployment mechanics; without the key there is nothing to deploy.
 
-1. Open **Settings → Outposts**: https://app.subimage.io/settings/outposts
-   (scoped tenants: `https://app.subimage.io/s/<slug>/settings/outposts`).
+1. Open **Settings → Outposts** at `/settings/outposts` on the tenant's SubImage URL. Deployments are single-tenant, so for most customers that is `https://<slug>.subimage.io/settings/outposts` (e.g. `https://acme.subimage.io/settings/outposts`).
 2. In the **Outpost registration key** field, click **Reveal**, then copy the value.
 3. The key starts with `tskey-client-`. It is a Tailscale OAuth client secret that SubImage provisions for the tenant; the user never signs up for Tailscale.
 
@@ -38,7 +37,7 @@ Facts that shape the rest of this flow:
 
 If the key is missing from the conversation, ask for it explicitly before generating any command:
 
-> "Can an admin open Settings → Outposts (https://app.subimage.io/settings/outposts), click Reveal on the Outpost registration key, and paste it here? It starts with `tskey-client-`."
+> "Can an admin open Settings → Outposts (`/settings/outposts` on your SubImage URL, e.g. `https://acme.subimage.io/settings/outposts`), click Reveal on the Outpost registration key, and paste it here? It starts with `tskey-client-`."
 
 ## Step 2: Collect the remaining inputs
 
@@ -46,7 +45,7 @@ If the key is missing from the conversation, ask for it explicitly before genera
 
 | Value | Where to find it | If missing, ask |
 |---|---|---|
-| `<TENANT_ID>` | SubImage tenant slug. Visible in the SubImage UI URL or at **Settings → Modules**. | "What is your SubImage tenant ID (the slug, e.g. `acme`)? You can find it in your SubImage URL." |
+| `<TENANT_ID>` | SubImage tenant slug, i.e. the subdomain of the SubImage URL (`acme` in `https://acme.subimage.io`). Also shown at **Settings → Modules**. | "What is your SubImage tenant ID (the slug, e.g. `acme`)? It is the subdomain of your SubImage URL." |
 | `<NAME>` | Optional. Unique name for this outpost; only matters if you deploy several. Default: `subimage`. | "Is this the only outpost for this tenant, or should I assign a unique `NAME` (e.g. `eks-prod`, `it`)?" |
 | `<PROXY_TARGET>` | Internal HTTPS URL the outpost will proxy to (e.g. `https://kubernetes.default.svc` for in-cluster, or `https://jamf.corp.example.com`). | "What internal URL should this outpost proxy traffic to?" |
 | `<VERIFY_TLS>` | `true` for valid public certs, `false` for self-signed. See the TLS gotcha before answering. | "Does the target endpoint use a publicly-signed TLS cert? If yes, `VERIFY_TLS=true`. If self-signed, `false`." |
@@ -152,7 +151,7 @@ For production stability, pin a version instead of `:latest` and roll forward in
 
 ## Step 4: Verify the outpost is up
 
-Start in the SubImage UI: **Settings → Outposts** (https://app.subimage.io/settings/outposts) lists every registered outpost with its hostname, Online/Offline status, last-seen time, and outpost version (flagged when outdated). The **Logs** button streams that outpost's logs without cluster access, which is the fastest check and works even when the user cannot run `kubectl`.
+Start in the SubImage UI: **Settings → Outposts** (`/settings/outposts`) lists every registered outpost with its hostname, Online/Offline status, last-seen time, and outpost version (flagged when outdated). The **Logs** button streams that outpost's logs without cluster access, which is the fastest check and works even when the user cannot run `kubectl`.
 
 Expect the hostname `<TENANT_ID>-<NAME>-outpost` to appear as Online within a minute or two of install.
 
@@ -250,6 +249,6 @@ Settings → Outposts flags an outdated outpost version next to the hostname, wh
 ## References
 
 - Canonical doc: https://app.subimage.io/docs/subimage_outpost
-- Outpost settings and registration key: https://app.subimage.io/settings/outposts
+- Outpost settings and registration key: `/settings/outposts` on the tenant's SubImage URL (`https://<slug>.subimage.io/settings/outposts`)
 - Outpost image: https://github.com/subimagesec/subimage-outpost
 - Helm chart: https://github.com/subimagesec/helm-charts
