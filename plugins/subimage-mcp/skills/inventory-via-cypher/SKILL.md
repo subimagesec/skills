@@ -140,18 +140,6 @@ ORDER BY email ASC
 SKIP 0 LIMIT 25
 ```
 
-Accounts, subscriptions, projects, organizations: all one label. The words in
-the question name providers, not types, so do not enumerate `:AWSAccount`,
-`:AzureSubscription`, `:GCPProject`, `:GitHubOrganization` and hope you listed
-them all. `:Tenant` already is that set, SaaS providers included:
-
-```cypher
-MATCH (n:Tenant)
-RETURN n.id AS id, coalesce(n._ont_name, n.name, n.id) AS name, n._ont_source AS provider
-ORDER BY provider, name
-LIMIT 100
-```
-
 Breakdown by one attribute:
 
 ```cypher
