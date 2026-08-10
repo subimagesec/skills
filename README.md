@@ -65,6 +65,7 @@ After install, skills are namespaced under their plugin:
 /subimage-mcp:investigate-public-exposure
 /subimage-mcp:review-attack-path
 /subimage-mcp:improve-subimage-coverage
+/subimage-mcp:inventory-via-cypher
 /subimage-mcp:build-cypher-query
 /subimage-mcp:create-custom-rule
 /subimage-mcp:identify-iac-repositories
@@ -110,6 +111,7 @@ plugins/
       investigate-public-exposure/SKILL.md
       review-attack-path/SKILL.md
       improve-subimage-coverage/SKILL.md
+      inventory-via-cypher/SKILL.md
       build-cypher-query/SKILL.md
       create-custom-rule/SKILL.md
       identify-iac-repositories/SKILL.md

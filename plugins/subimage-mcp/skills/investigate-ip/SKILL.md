@@ -21,7 +21,7 @@ The graph is authoritative for internal ownership; `subimageEnrichIp` adds the e
 ✅ Triaging an IP or domain from a log line, alert, or finding.
 ✅ Tracing a domain's resolution chain to the resource behind it.
 
-❌ Listing all your public IPs → `subimageGetInventory` with `inventory_type=publicips`.
+❌ Listing all your public IPs → `subimage-mcp:inventory-via-cypher` (the `:PublicIP` label).
 ❌ Explaining why a resource is public/exposed → `subimage-mcp:investigate-public-exposure`.
 ❌ The attack path from an exposed resource → `subimage-mcp:review-attack-path`.
 
