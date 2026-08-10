@@ -10,7 +10,7 @@ Produce a correct Cypher query that answers the user's question, in as few tool 
 ## Hard entry gate
 
 - Before any schema discovery, model-query lookup, or Cypher execution, check whether a dedicated SubImage MCP tool can answer the user's exact question. If yes, do not use this skill.
-- If there is already a non-empty result from Issues, Vulnerabilities, Inventory, Compliance, or Attack Paths that directly answers the question: stop and answer from that result. Do not use this skill to validate, enrich, double-check, or improve confidence.
+- If there is already a non-empty result from Issues, Vulnerabilities, Compliance, or Attack Paths that directly answers the question: stop and answer from that result. Do not use this skill to validate, enrich, double-check, or improve confidence.
 - "More graph detail might exist", "validate with Cypher", and "dedicated tool result was non-empty" are not sufficient reasons. This skill is blocked unless the user explicitly asks for graph relationships, root cause, blast radius, reachability, ownership, permissions, or absence validation.
 
 ## When to use
@@ -22,7 +22,8 @@ Produce a correct Cypher query that answers the user's question, in as few tool 
 ✅ The answer requires joining graph entities across domains and no dedicated MCP tool can answer directly.
 
 ❌ A dedicated MCP tool answers the question directly.
-❌ Remediation, prioritization, action items, vulnerability lookup, package fixability, framework findings, inventory listing, or attack-path enumeration where the matching dedicated tool returned non-empty results.
+❌ Remediation, prioritization, action items, vulnerability lookup, package fixability, framework findings, or attack-path enumeration where the matching dedicated tool returned non-empty results.
+❌ A flat listing, count, or filter of ONE resource type → `subimage-mcp:inventory-via-cypher`, which maps the type to its ontology label without schema discovery.
 ❌ Only trying to validate, enrich, or double-check a sufficient dedicated-tool result.
 ❌ The user has a known-good Cypher query in hand. Skip this skill and run `subimageRunCypher` directly.
 
