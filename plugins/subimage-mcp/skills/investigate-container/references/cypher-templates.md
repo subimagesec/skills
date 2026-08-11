@@ -89,21 +89,38 @@ RETURN repo.fullname AS github_repo, repo.url AS repo_url,
 LIMIT 10
 ```
 
-### Step 5: Vulnerabilities (Cypher fallback)
+### Step 5: Vulnerabilities
 
-Prefer `subimageListVulnerabilities(image_name=…)` / `subimageGetVulnerabilityDetails`. If you must use the graph:
+Vulnerabilities on an image are `:VulnerabilitySignal:Signal` nodes, each an
+active `(cve_id, service_image)` observation pointing at one `:CVEMetadata`:
 
 ```cypher
-MATCH (img:Image)<-[:AFFECTS]-(c:CVE) WHERE img.id = $image_id
-OPTIONAL MATCH (cm:CVEMetadata)-[:ENRICHES]->(c)
-OPTIONAL MATCH (c)-[:AFFECTS]->(pkg:Package)-[:DEPLOYED]->(img)
-RETURN c.cve_id AS cve_id, c.description AS description,
-       cm.severity AS severity, cm.cvss_score AS cvss_score,
-       cm.epss_score AS epss_score, cm.kev AS kev,
+MATCH (v:VulnerabilitySignal:Signal)-[:AFFECTS]->(img:Image)
+      WHERE img.id = $image_id AND v.status = 'active'
+MATCH (v)-[:INSTANCE_OF]->(m:CVEMetadata)
+OPTIONAL MATCH (m)-[:ENRICHES]->(:TrivyImageFinding:CVE)-[:AFFECTS]->(pkg:PackageVersion)
+      WHERE EXISTS { (pkg)-[:DEPLOYED]->(img) }
+RETURN m.id AS cve_id, m.description AS description,
+       CASE
+         WHEN m.base_severity IS NOT NULL THEN toUpper(m.base_severity)
+         WHEN m.base_score >= 9 THEN 'CRITICAL'
+         WHEN m.base_score >= 7 THEN 'HIGH'
+         WHEN m.base_score >= 4 THEN 'MEDIUM'
+         WHEN m.base_score > 0 THEN 'LOW'
+         ELSE 'UNKNOWN'
+       END AS severity,
+       m.base_score AS cvss_score, m.epss_score AS epss_score,
+       coalesce(m.is_kev, false) AS kev,
        collect(DISTINCT pkg.name) AS affected_packages
-ORDER BY COALESCE(cm.cvss_score, -1) DESC
+ORDER BY coalesce(m.base_score, -1) DESC
 LIMIT 50
 ```
+
+Three property names to keep straight, because the obvious guesses are wrong:
+severity is `base_severity` (and null often enough to need the score fallback),
+the CVSS score is `base_score`, and KEV membership is `is_kev`. Packages are
+`:PackageVersion`, not `:Package`, and the `EXISTS` clause keeps the join to
+packages actually deployed on this image.
 
 ## Cluster Exposure (Mode 2)
 

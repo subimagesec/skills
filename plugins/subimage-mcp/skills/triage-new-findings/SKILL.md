@@ -21,13 +21,13 @@ Lists SubImage's security rules, groups the ones with findings by tag (theme/cat
 
 ## Prerequisites
 
-The `subimageReadMe` global tool guide is available. This skill assumes the role-based tools (`subimageListRules`, `subimageGetRuleFindings`, optionally `subimageSendNotification` and `subimageCreateTicket`) are reachable.
+The `subimageReadMe` global tool guide is available. This skill assumes the role-based tools (`subimageListRules`, `subimageRunCypher`, optionally `subimageSendNotification` and `subimageCreateTicket`) are reachable.
 
 ## Optional inputs (ask only if relevant)
 
 | Value | When to ask |
 |---|---|
-| Tag / theme filter | If the user mentions one explicitly ("IAM", "exposure", "encryption"), scope to rules carrying that tag. If they name a framework ("CIS AWS", "SubImage", "SOC 2"), keep only rules whose `frameworks` (from `subimageGetRuleFindings`) include it. Otherwise break down by tag across all rules. |
+| Tag / theme filter | If the user mentions one explicitly ("IAM", "exposure", "encryption"), scope to rules carrying that tag. If they name a framework ("CIS AWS", "SubImage", "SOC 2"), keep only rules mapped to it via `(:Rule)-[:MAPS_TO]->(:Framework)`. Otherwise break down by tag across all rules. |
 | Time window | If the user says "this week", "since yesterday": apply that window to `lastSeenAt` / `firstSeenAt`. Default: open and recently updated. |
 | Severity threshold | If the user says "only criticals": filter `severity in [critical, high]`. Default: include everything. |
 | Notification target | Only if the user explicitly asks to ship the digest somewhere (Slack channel, email, ticket). Never send unprompted. |
@@ -52,12 +52,34 @@ Take the top 5 to 10 per tag group. Going wider produces noise; going narrower h
 
 ### 3. Pull findings for the top rules
 
-For each top rule, call `subimageGetRuleFindings(rule_id)`. Collect:
+Findings are `:Signal` nodes in the graph, one per affected asset. Pull the top
+rules in one query rather than one call per rule:
 
-- resource type / cloud account / region distribution
+```cypher
+MATCH (r:Rule)
+WHERE r.id IN ['<rule-id-1>', '<rule-id-2>']
+CALL (r) {
+  MATCH (r)-[:PRODUCED]->(f:Finding:Signal)-[:AFFECTS]->(n)
+  WHERE f.status = 'active'
+  RETURN f, n
+  ORDER BY f.first_seen DESC
+  LIMIT 25
+}
+RETURN r.id AS rule, f.id AS finding_id, f.display_name AS asset_name,
+       n.id AS asset_id, labels(n) AS asset_labels, f.first_seen AS first_seen
+ORDER BY rule, first_seen DESC
+```
+
+The per-rule subquery is what makes "top 25 most recent **per rule**" hold. A
+single global `LIMIT` ordered by name would spend the whole budget on whichever
+rule sorts first and return nothing for the rest.
+
+Collect:
+
+- resource type / cloud account / region distribution, from `asset_labels` and by traversing from the asset to its `:Tenant`
 - a few representative resource ids (use entity tags so the UI links to them)
-- the `frameworks` the rule belongs to (optional context for the digest)
-- whether any are already accepted/dismissed (skip those in the digest)
+- the frameworks the rule belongs to, via `(r)-[:MAPS_TO]->(:Framework)` (optional context for the digest)
+- the query above already excludes accepted findings (`f.status = 'active'`), which is what the digest wants
 
 If a rule has hundreds of findings, sample the most recent and mention the total count.
 
@@ -117,7 +139,7 @@ Never auto-send without explicit confirmation. The digest is most useful as a ch
 
 - Listing all rules with `findings_count > 0` regardless of severity. Turns the digest into a CSV.
 - Passing a `framework=` argument to `subimageListRules`. The tool does not accept one; list rules directly and group by `tags`.
-- Reformatting the raw `subimageGetRuleFindings` output as a Markdown table. The system prompt in chat already forbids this for tool-derived data, and the markdown table produces a wall of text.
+- Reformatting the raw finding rows as a Markdown table. The system prompt in chat already forbids this for tool-derived data, and the markdown table produces a wall of text.
 - Speculating about why a finding exists without a Cypher query to back it up. Stay grounded in tool output.
 - Quoting the same resource multiple times in the same theme. Tag once, then count "+N more".
 

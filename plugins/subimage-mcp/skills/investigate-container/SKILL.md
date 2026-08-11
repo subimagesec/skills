@@ -32,7 +32,7 @@ One skill, three investigation modes over container/Kubernetes data in the SubIm
 ## Prerequisites
 
 - Relevant module synced (`subimageListModules`): ECS/EKS/Kubernetes for cluster modes, ECR/GAR/GitLab for registry data, GitHub for source provenance.
-- For the CVE section of Mode 1, prefer the structured tools: `subimageListVulnerabilities(image_name=…)` and `subimageGetVulnerabilityDetails`: over raw Cypher where they fit.
+- The CVE section of Mode 1 reads `:VulnerabilitySignal:Signal` nodes off the image; see the Step 5 template in `references/cypher-templates.md`.
 - All Cypher follows `subimage-mcp:build-cypher-query` discipline: schema-validate labels/properties with `subimageGetNodesSchema` / `searchModelQueries` before trusting a template, then run with `subimageRunCypher`. Templates live in `references/cypher-templates.md` and are starting points, not guarantees.
 
 ## Reusable correctness note (applies to Modes 1-3)
@@ -49,7 +49,7 @@ Run the § Image Provenance queries from the templates, threading the resolved `
 2. **Registry repository**: ECR / GCP Artifact Registry / GitLab.
 3. **Running workloads**: Containers (`state = 'running'`) → Pod → Service for cluster-backed providers, or Container → Service directly for serverless (Cloud Run); plus Functions.
 4. **Source origin**: `PACKAGED_FROM` → GitHub repo + Dockerfile path.
-5. **Vulnerabilities**: via `subimageListVulnerabilities(image_name=…)` / `subimageGetVulnerabilityDetails`, or the CVE template as fallback.
+5. **Vulnerabilities**: `:VulnerabilitySignal:Signal` affecting the image, via the Step 5 CVE template.
 
 ### Mode 2: Cluster exposure
 
@@ -92,7 +92,7 @@ In-chat report (no file output). Tag resources with `[[entity:<Label>:<id>|<name
 
 - Counting cluster nodes without `WHERE ec2.state = 'running'`. This is the documented cause of inflated counts; always filter.
 - Trusting a template label/relationship without schema-validating it. Container/K8s labels (`Image`, `Container`, `ComputePod`, `KubernetesService`, `EKSCluster`) drift; an unvalidated `MATCH` silently returns nothing.
-- Reaching for Cypher for the CVE section when `subimageListVulnerabilities(image_name=…)` answers it directly.
+- Reading severity off `m.severity` or KEV off `m.kev`. The properties are `base_severity` (null often enough to need the score fallback) and `is_kev`.
 - Running all three modes when the user asked about one. Pick the mode; offer the others as follow-ups.
 - Reformatting raw query output as a wall-of-text table. Summarize and tag the notable resources.
 - Unbounded queries. `LIMIT` everything.

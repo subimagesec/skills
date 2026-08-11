@@ -130,7 +130,7 @@ Tell the user:
 
 - the new rule id,
 - that findings appear after the next scheduled findings build, not immediately,
-- after the next build, they can call `subimageGetRuleFindings(rule_id=<new-id>)` or open the rule in the SubImage UI.
+- after the next build, they can read the rule's findings with the Cypher in Verification below, or open the rule in the SubImage UI.
 
 ## Output
 
@@ -138,7 +138,15 @@ A persisted custom rule registered with the tenant, produced by the single `subi
 
 ## Verification
 
-After the next scheduled findings build completes, call `subimageGetRuleFindings(rule_id=<new-id>)`. Expect a row count consistent with what `subimageRunCypher` returned during Step 4. If the build has not run yet, the call returns an empty result; this is not a failure.
+After the next scheduled findings build completes, count the Findings the rule produced:
+
+```cypher
+MATCH (:Rule {id: '<new-id>'})-[:PRODUCED]->(f:Finding:Signal)
+WHERE f.status = 'active'
+RETURN count(f) AS findings
+```
+
+Expect a count consistent with what `subimageRunCypher` returned during Step 4. If the build has not run yet, the count is zero; this is not a failure.
 
 ## Anti-patterns
 

@@ -15,12 +15,12 @@ Given a CVE id, pulls SubImage's full picture for it: severity, KEV status, affe
 ✅ User asks "should we patch CVE-X first" or "is CVE-X in the KEV catalog".
 ✅ User wants the list of containers / packages / images affected by a CVE.
 
-❌ User wants the entire vulnerability backlog: use `subimage-mcp:triage-new-findings` (compliance) or `subimageGetVulnerabilitySummary` for raw counts.
+❌ User wants the entire vulnerability backlog: use `subimage-mcp:triage-new-findings` (compliance), or count `(:VulnerabilitySignal:Signal)` by severity for raw numbers.
 ❌ User wants to compare two CVEs: just run this skill twice and contrast the outputs.
 
 ## Prerequisites
 
-This skill uses `subimageGetVulnerabilityDetails`, `subimageGetPackageDetails`, and (optionally) `subimageAgentBuildQuery` + `subimageRunCypher`. The optional internet-enrichment step uses `WebSearch` (and `WebFetch` for a specific advisory URL). The pivot at the end uses `subimageGetAttackPathsFromAsset`.
+This skill reads the vulnerability graph through `subimageRunCypher` (optionally with `subimageAgentBuildQuery` to draft a query). The optional internet-enrichment step uses `WebSearch` (and `WebFetch` for a specific advisory URL). The pivot at the end reads attack paths from the same graph.
 
 ## Required inputs
 
@@ -32,19 +32,83 @@ This skill uses `subimageGetVulnerabilityDetails`, `subimageGetPackageDetails`, 
 
 ### 1. Pull the full CVE record
 
-```
-subimageGetVulnerabilityDetails(cve_id="<CVE_ID>")
+A CVE is present as one `:VulnerabilitySignal:Signal` per affected service
+image, all pointing at the same `:CVEMetadata`:
+
+```cypher
+MATCH (v:VulnerabilitySignal:Signal)-[:INSTANCE_OF]->(m:CVEMetadata)
+WHERE v.cve_id = toUpper('<CVE_ID>') AND v.status = 'active'
+OPTIONAL MATCH (m)-[:ENRICHES]->(:TrivyImageFinding:CVE)-[:AFFECTS]->(p:PackageVersion)
+WHERE EXISTS { (v)-[:AFFECTS]->(:Image)<-[:DEPLOYED]-(p) }
+RETURN DISTINCT m.id AS cve, m.title AS title, m.description AS description,
+       CASE
+         WHEN m.base_severity IS NOT NULL THEN toUpper(m.base_severity)
+         WHEN m.base_score >= 9 THEN 'CRITICAL'
+         WHEN m.base_score >= 7 THEN 'HIGH'
+         WHEN m.base_score >= 4 THEN 'MEDIUM'
+         WHEN m.base_score > 0 THEN 'LOW'
+         ELSE 'UNKNOWN'
+       END AS severity,
+       m.base_score AS cvss_score, m.published_date AS published_date,
+       coalesce(m.is_kev, false) AS cisa_known_exploit, m.cisa_exploit_add AS kev_date,
+       m.epss_score AS epss_score, m.epss_percentile AS epss_percentile,
+       v.service_image AS service_image,
+       p.name AS package, p.version AS installed, p.fixed_version AS fixed_in
+ORDER BY service_image, package
+LIMIT 100
 ```
 
-This returns: severity, CVSS, `cisa_known_exploit` (KEV) and `kev_date`, `epss_score` / `epss_percentile`, `published_date`, description, `affected_packages` (each with name, version, type, and the available fix version), and `affected_resources` (containers running vulnerable images).
+Two things this query encodes and a shorter one would get wrong. The severity
+`CASE` is the fallback the product applies: `base_severity` is null on some CVEs
+and reading it raw silently drops them. The `EXISTS` clause pins each package to
+an image the Signal actually affects; `ENRICHES` alone reaches every occurrence
+of that CVE across the fleet.
 
-If the response is empty or 404, the CVE is not present in this tenant's data. Stop and tell the user: "SubImage has no record of `<CVE_ID>` in your environment. Either it does not affect any synced asset, or vulnerability scanning is not enabled for the relevant module. Run `subimage-mcp:improve-subimage-coverage` to check coverage."
+`toUpper()` matters because CVE ids are uppercase in the graph and users type
+them either way.
+
+If the query returns no rows, the CVE is not present in this tenant's data. Stop and tell the user: "SubImage has no record of `<CVE_ID>` in your environment. Either it does not affect any synced asset, or vulnerability scanning is not enabled for the relevant module. Run `subimage-mcp:improve-subimage-coverage` to check coverage."
+
+Then find where it actually runs. The Signal affects an image; the workloads
+running that image are one hop further:
+
+```cypher
+MATCH (v:VulnerabilitySignal:Signal)-[:AFFECTS]->(i:Image)<-[:RESOLVED_IMAGE]-(rt)
+WHERE v.cve_id = toUpper('<CVE_ID>') AND v.status = 'active'
+  AND (rt:Container OR rt:Function)
+  AND (NOT rt:Container OR rt._ont_state = 'running')
+RETURN DISTINCT rt.id AS runtime_id, coalesce(rt._ont_name, rt.name) AS runtime_name,
+       labels(rt) AS labels, i.id AS image
+ORDER BY runtime_id
+LIMIT 100
+```
+
+A vulnerable image nobody runs is a different conversation from a vulnerable
+image on a production container, so keep the two counts distinct in the summary.
+`subimageRunCypher` takes no query parameters, so every value above is inlined
+as a literal: escape backslashes and single quotes before substituting. ARNs
+and fully-qualified GCP/Azure ids can carry either.
+
 
 ### 2. Read fixability from the record
 
-Fix data is already in step 1's `affected_packages`: each entry carries the available fix version (or none). Derive, per package: target fix version, affected containers (from `affected_resources`), and whether the fix is a package bump or an image rebuild.
+Fix data is already in step 1: each row carries `installed` and `fixed_in`. A
+null `fixed_in` means no fix is published; say so rather than dropping the row.
+Derive, per package: target fix version, the affected workloads from the
+runtime query above, and whether the fix is a package bump or an image rebuild.
 
-Call `subimageGetPackageDetails(package_name="<package-name>")` **only** when you need deeper per-package detail the CVE record does not carry (transitive dependents, other CVEs on the same package, full version history). The argument is `package_name`, not `package`. There is no `subimageGetFixDetails` tool; do not call one.
+Query further **only** when you need per-package detail step 1 does not carry,
+such as every other CVE on the same package:
+
+```cypher
+MATCH (p:PackageVersion {name: '<package-name>'})-[:DEPLOYED]->(:Image)
+      <-[:AFFECTS]-(v:VulnerabilitySignal:Signal)-[:INSTANCE_OF]->(m:CVEMetadata)
+WHERE v.status = 'active'
+RETURN DISTINCT m.id AS cve, m.base_severity AS severity, m.base_score AS cvss_score,
+       p.version AS installed, p.fixed_version AS fixed_in
+ORDER BY cvss_score DESC
+LIMIT 100
+```
 
 If nothing is fixable, note that explicitly in the summary; the next action shifts from "patch" to "monitor / mitigate / accept".
 
@@ -65,7 +129,7 @@ When not triggered, skip it and instead offer it as a one-line follow-up ("Want 
 
 Use Cypher only when:
 
-- The CVE record points at a resource type SubImage's structured tools do not surface in detail.
+- Steps 1 and 2 point at a resource type whose surroundings you still need to map.
 - The user explicitly asks how the CVE could propagate (e.g. "if `lodash` is here, where else is it transitively?").
 
 ```
@@ -74,7 +138,7 @@ subimageAgentBuildQuery(user_question="<rephrased intent>")
 subimageRunCypher(query="<query returned above>")
 ```
 
-Skip this step otherwise. The structured tools are faster and citable.
+Skip this step otherwise. Steps 1 and 2 already answer the common questions.
 
 ### 5. Summarize
 
@@ -120,13 +184,20 @@ This is the most common follow-up question. Do NOT auto-pivot. End the response 
 
 ```
 Do you want me to check whether any of these resources sit on a known attack path?
-I can run `subimageGetAttackPathsFromAsset` on the top exposed resources and walk through
+I can check the top exposed resources against the attack-path graph and walk through
 the highest-impact ones with you (skill: `subimage-mcp:review-attack-path`).
 ```
 
 If the user confirms:
 
-- For each of the top 3 to 5 exposed resources, call `subimageGetAttackPathsFromAsset(asset_id=<id>)`.
+- For each of the top 3 to 5 exposed resources, look for paths touching it:
+  ```cypher
+  MATCH (a:AttackPath:Signal)-[:HAS_STEP]->(:AttackPathStep)-[:FROM|TO]->(n {id: '<resource-id>'})
+  WHERE a.status = 'active' AND a.context_type = 'default'
+  RETURN DISTINCT a.id AS id, a.title AS title, a.criticality_score AS criticality
+  ORDER BY criticality DESC, id
+  LIMIT 20
+  ```
 - For any non-empty result, hand off to `subimage-mcp:review-attack-path` with the most critical path id.
 - If all results are empty: "Good news: none of the affected resources are on a known attack path right now."
 
@@ -134,7 +205,7 @@ This converts a static CVE finding into a live exploitability question, which is
 
 ## Anti-patterns
 
-- Reformatting `subimageGetVulnerabilityDetails` output as a markdown table. Forbidden by the chat system prompt for tool data.
+- Reformatting the CVE query output as a markdown table. Forbidden by the chat system prompt for tool data.
 - Asking the user to run `subimageRunCypher` themselves. Run it, summarize the result.
 - Auto-pivoting to attack paths without confirmation. The user should opt in.
 - Listing every affected resource. Top 5 + a count is enough.
