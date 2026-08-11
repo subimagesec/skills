@@ -69,8 +69,9 @@ shared properties:
 `status IN ['active','accepted']` is the full current set. An accepted Signal is
 still in the graph and silently inflates a count that meant "open".
 
-Only active Signals exist. There is no inactive Signal to find, so absence in
-the graph proves current absence, not that something never happened.
+Only current Signals exist, whether active or accepted. There is no inactive
+Signal to find, so absence in the graph proves current absence, not that
+something never happened.
 
 ## Findings and compliance
 
@@ -185,9 +186,9 @@ LIMIT 100
 Where a CVE actually runs:
 
 ```cypher
-MATCH (v:VulnerabilitySignal:Signal {cve_id: 'CVE-2026-11111'})-[:AFFECTS]->(i:Image)
-      <-[:RESOLVED_IMAGE]-(rt)
-WHERE v.status = 'active'
+MATCH (v:VulnerabilitySignal:Signal)-[:AFFECTS]->(i:Image)<-[:RESOLVED_IMAGE]-(rt)
+WHERE v.cve_id = toUpper('cve-2026-11111')
+  AND v.status = 'active'
   AND (rt:Container OR rt:Function)
   AND (NOT rt:Container OR rt._ont_state = 'running')
 RETURN DISTINCT rt.id AS runtime_id, coalesce(rt._ont_name, rt.name) AS name,
@@ -201,11 +202,17 @@ Fixability, per package:
 MATCH (v:VulnerabilitySignal:Signal)-[:INSTANCE_OF]->(m:CVEMetadata)
       -[:ENRICHES]->(:TrivyImageFinding:CVE)-[:AFFECTS]->(p:PackageVersion)
 WHERE v.status = 'active'
+  AND EXISTS { (v)-[:AFFECTS]->(:Image)<-[:DEPLOYED]-(p) }
 RETURN DISTINCT v.cve_id AS cve, p.name AS package, p.version AS installed,
        p.fixed_version AS fixed_in
 ORDER BY package
 LIMIT 100
 ```
+
+The `EXISTS` clause is load-bearing, not a refinement. `ENRICHES` reaches every
+package occurrence of that CVE anywhere in the fleet, so without it each Signal
+is reported against packages from images it does not affect. Pin the package to
+an image the Signal actually affects, through `DEPLOYED`.
 
 A null `fixed_version` means no fix is published; say so rather than omitting the
 row.
@@ -263,7 +270,8 @@ LIMIT 20
 ```
 
 Prefer `s.description`, which is the rendered step text.
-`templated_description` still holds `{{...}}` placeholders and is not for display.
+`templated_description` still holds unrendered double-brace placeholders and is
+not for display.
 
 ## Rules
 
