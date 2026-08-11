@@ -79,6 +79,10 @@ The graph is the source of truth. Be conservative.
    Use `s.description`, which is the rendered step text. `s.templated_description`
    still holds unrendered placeholders and is not for display. This result is
    bounded by construction (one path's steps), so it takes no `LIMIT`.
+
+   `FROM|TO` is the correct join *here*, because these are the endpoints the step
+   displays and the path id is already known. It is not the join for finding
+   which paths touch an asset; see Mode B.
 2. Decompose the path into four parts:
    - **Initial compromise**: the entry node and what gets the attacker in.
    - **Key pivots**: the 1 to 3 transitions that materially change the attacker's position (privilege gain, network reach, data access).
@@ -89,17 +93,33 @@ The graph is the source of truth. Be conservative.
 
 ### Mode B: pivot from an asset
 
-1. Find the paths that touch the asset, at either end of any step:
+1. Find the paths that touch the asset. An asset participates through an
+   `AttackerCapacity`, so the join runs `REASON|ON` to the capacity and `GRANTS`
+   back to the step:
    ```cypher
-   MATCH (a:AttackPath:Signal)-[:HAS_STEP]->(:AttackPathStep)-[:FROM|TO]->(n {id: '<ASSET_ID>'})
-   WHERE a.status = 'active' AND a.context_type = 'default'
-   RETURN DISTINCT a.id AS id, a.title AS title, a.criticality_score AS criticality
+   MATCH (n {id: '<ASSET_ID>'})-[:REASON|ON]-(c:AttackerCapacity)
+         <-[:GRANTS]-(:AttackPathStep)<-[:HAS_STEP]-(a:AttackPath:Signal)
+   WHERE coalesce(a.status, 'active') IN ['active', 'accepted']
+   RETURN DISTINCT a.id AS id, a.title AS title, a.criticality_score AS criticality,
+          a.context_type AS context, coalesce(a.status, 'active') AS status
    ORDER BY criticality DESC, id
    LIMIT 20
    ```
-   Filter `context_type = 'default'` unless the user asked about a rule context
-   or a saved scenario; otherwise the same path comes back once per context.
-2. If empty: "No known attack path involves `<ASSET_ID>` right now. The asset may still be at risk via paths the engine has not modeled. Want me to run the n+1 extension hunt (Mode C) starting from this asset?"
+   **Do not rewrite this as `(:AttackPathStep)-[:FROM|TO]->(n)`.** `FROM` and `TO`
+   are derived edges holding the endpoints a step *displays*: `TO` comes from the
+   step's own capacity, `FROM` from the previous step's. An asset can be the
+   `REASON` a capacity holds without ever being an endpoint, and matching
+   endpoints reports "no path" for exactly those assets. The endpoint join is the
+   right one for rendering a path you already have, which is what Mode A does; it
+   is the wrong one for discovering paths.
+
+   `coalesce` on the status is not defensive padding: a path Signal can carry no
+   `status` property, and that counts as active.
+
+   `context_type` is returned rather than filtered, matching the product's own
+   lookup. Narrow to `'default'` when the user asked for the environment-wide
+   picture, or when the same path is coming back once per context.
+2. If empty: "No known attack path involves `<ASSET_ID>` right now. The asset may still be at risk via paths the engine has not modeled. Want me to run the n+1 extension hunt (Mode C) starting from this asset?" This reassurance is only sound with the capacity join above.
 3. If non-empty: pick the top 1 to 3, run Mode A on each.
 
 ### Mode C: hunt for n+1 extensions
@@ -135,6 +155,8 @@ Only when the user asks ("what if X is compromised", "simulate granting Y").
 These apply to the Mode A and Mode B queries above as well as to Mode C probes:
 
 - `subimageRunCypher` takes no query parameters, so `<ATTACK_PATH_ID>` and `<ASSET_ID>` are inlined as literals. Escape backslashes and single quotes before substituting; ARNs and fully-qualified GCP/Azure ids can carry either, and an unescaped apostrophe breaks the statement.
+- The tool returns at most 100 rows whatever `LIMIT` you write, and reports the true `total_count` alongside. That is well above anything here, but quote `total_count` rather than the page size if a probe ever hits it.
+- The attack-path relationship inventory is closed. Steps have `<-[:HAS_STEP]-`, `-[:GRANTS]->`, `-[:FROM]->`, `-[:TO]->`; capacities have `<-[:GRANTS]-`, `-[:ON]->`, `-[:REASON]->`, and `REQUIRED` to other capacities. There is no `(:AttackPathStep)-[:ON]->` or `(:AttackPathStep)-[:REASON]->`; those two hang off the capacity.
 - Always cap exploratory queries: `LIMIT 5`. Wider scans burn tokens and add no signal.
 - Start broad, then refine. First query confirms the shape exists; second query gets the specific rows.
 - For text matching, prefer `toLower(prop) CONTAINS "term"` over regex.

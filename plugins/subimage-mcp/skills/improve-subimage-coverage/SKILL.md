@@ -123,18 +123,31 @@ Group the kept rules by `tags` (a rule with multiple tags appears in each of its
 2. Findings count (desc).
 
 Take a candidate top ~8 rules, then pull their findings in one query. Findings
-are `:Signal` nodes in the graph, one per affected asset:
+are `:Signal` nodes in the graph, one per affected asset. Slice per rule, not
+globally:
 
 ```cypher
-MATCH (r:Rule)-[:PRODUCED]->(f:Finding:Signal)-[:AFFECTS]->(n)
-WHERE r.id IN ['<rule-id-1>', '<rule-id-2>'] AND f.status = 'active'
+MATCH (r:Rule)
+WHERE r.id IN ['<rule-id-1>', '<rule-id-2>']
+CALL (r) {
+  MATCH (r)-[:PRODUCED]->(f:Finding:Signal)-[:AFFECTS {role: 'primary'}]->(n)
+  WHERE f.status = 'active'
+  RETURN f, n
+  ORDER BY f.first_seen DESC
+  LIMIT 12
+}
 RETURN r.id AS rule, f.display_name AS asset_name, n.id AS asset_id,
-       labels(n) AS asset_labels
+       labels(n) AS asset_labels, f.first_seen AS first_seen
 ORDER BY rule, asset_name
-LIMIT 100
 ```
 
-Capture: a few representative resources (with entity tags), account or project distribution, and (optional context) the frameworks the rule belongs to, via `(r)-[:MAPS_TO]->(:Framework)`. Findings carry no severity field, so keep the ranking above (repo relevance, then findings count) and take the top 5.
+`subimageRunCypher` returns at most 100 rows whatever `LIMIT` you write, so
+`rules x per-rule limit` has to stay under it: 8 rules at 12 is 96. A single
+global `LIMIT 100` ordered by rule name would let one noisy rule consume the
+entire budget, leaving every other rule looking clean when it is not. Keep the
+`CALL (r) { ... }` subquery; that is what makes the slice per rule.
+
+Capture: a few representative resources (with entity tags), account or project distribution, and (optional context) the frameworks the rule belongs to, via `(r)-[:MAPS_TO]->(:Framework)`, whose id is `{short_name}:{scope}` such as `cis:aws` or `soc2:tsc`. Findings carry no severity field, so keep the ranking above (repo relevance, then findings count) and take the top 5.
 
 ### 6. Output
 

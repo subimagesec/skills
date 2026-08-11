@@ -48,40 +48,53 @@ Group the kept rules by `tags` (a rule with multiple tags appears in each of its
 2. Findings count (desc)
 3. Most recently updated
 
-Take the top 5 to 10 per tag group. Going wider produces noise; going narrower hides cross-cutting patterns.
+Take the top 5 per tag group. Going wider produces noise, and step 3 can only pull findings for 5 rules per call anyway.
 
 ### 3. Pull findings for the top rules
 
 Findings are `:Signal` nodes in the graph, one per affected asset. Pull the top
-rules in one query rather than one call per rule:
+rules in one query rather than one call per rule.
+
+**Budget the row count first.** `subimageRunCypher` returns at most 100 rows
+whatever `LIMIT` you write, so `rules x per-rule limit` must stay under 100.
+Take **at most 5 rules at 20 findings each**. Ask for 8 rules at 25 and you get
+200 rows requested, 100 returned, and the tail rules come back empty while the
+digest reads as if they had no findings.
 
 ```cypher
 MATCH (r:Rule)
 WHERE r.id IN ['<rule-id-1>', '<rule-id-2>']
 CALL (r) {
-  MATCH (r)-[:PRODUCED]->(f:Finding:Signal)-[:AFFECTS]->(n)
+  MATCH (r)-[:PRODUCED]->(f:Finding:Signal)-[:AFFECTS {role: 'primary'}]->(n)
   WHERE f.status = 'active'
   RETURN f, n
   ORDER BY f.first_seen DESC
-  LIMIT 25
+  LIMIT 20
 }
 RETURN r.id AS rule, f.id AS finding_id, f.display_name AS asset_name,
        n.id AS asset_id, labels(n) AS asset_labels, f.first_seen AS first_seen
 ORDER BY rule, first_seen DESC
 ```
 
-The per-rule subquery is what makes "top 25 most recent **per rule**" hold. A
+The per-rule subquery is what makes "top 20 most recent **per rule**" hold. A
 single global `LIMIT` ordered by name would spend the whole budget on whichever
 rule sorts first and return nothing for the rest.
+
+`first_seen` is a graph temporal, so `ORDER BY` on it is chronological rather
+than lexicographic. `role: 'primary'` is the only role written on a finding's
+`AFFECTS`, so naming it changes no results; it just states which edge is meant.
+
+If more than 5 rules deserve a look, run the query again with the next batch
+rather than widening one call.
 
 Collect:
 
 - resource type / cloud account / region distribution, from `asset_labels` and by traversing from the asset to its `:Tenant`
 - a few representative resource ids (use entity tags so the UI links to them)
-- the frameworks the rule belongs to, via `(r)-[:MAPS_TO]->(:Framework)` (optional context for the digest)
-- the query above already excludes accepted findings (`f.status = 'active'`), which is what the digest wants
+- the frameworks the rule belongs to, via `(r)-[:MAPS_TO]->(:Framework)`, whose id is `{short_name}:{scope}` such as `cis:aws` or `soc2:tsc` (optional context for the digest)
+- the query filters `f.status = 'active'`, which drops findings whose risk a human accepted. That is a deliberate narrowing for a "what is open" digest, and it is narrower than the product's own finding reads, which return active and accepted and label the accepted ones. Widen to `IN ['active','accepted']` if the user asks what the rule currently matches rather than what is on their plate.
 
-If a rule has hundreds of findings, sample the most recent and mention the total count.
+If a rule has hundreds of findings, sample the most recent and mention the total count from the `total_count` the tool returns.
 
 ### 4. Group and prioritize
 
