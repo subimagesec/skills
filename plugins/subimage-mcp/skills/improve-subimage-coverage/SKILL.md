@@ -157,7 +157,7 @@ If empty: omit this section.
 
 ## Top actionable findings (by tag)
 ### <tag group, e.g. "iam" / "exposure" / "encryption">
-1. <rule title>: <count> findings, severity <X>
+1. <rule title>: <count> findings
    - hot resources: [[entity:<Label>:<id>|<short>]] (+<rest>)
    - tied to: <provider> *(newly detected: yes/no)*
    - next step: <one line>

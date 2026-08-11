@@ -132,8 +132,9 @@ Only when the user asks ("what if X is compromised", "simulate granting Y").
 
 ## Cypher rules for graph probes
 
-When running Cypher in Mode C (and any time you escalate to `subimageRunCypher`):
+These apply to the Mode A and Mode B queries above as well as to Mode C probes:
 
+- `subimageRunCypher` takes no query parameters, so `<ATTACK_PATH_ID>` and `<ASSET_ID>` are inlined as literals. Escape backslashes and single quotes before substituting; ARNs and fully-qualified GCP/Azure ids can carry either, and an unescaped apostrophe breaks the statement.
 - Always cap exploratory queries: `LIMIT 5`. Wider scans burn tokens and add no signal.
 - Start broad, then refine. First query confirms the shape exists; second query gets the specific rows.
 - For text matching, prefer `toLower(prop) CONTAINS "term"` over regex.

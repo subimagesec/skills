@@ -56,20 +56,30 @@ Findings are `:Signal` nodes in the graph, one per affected asset. Pull the top
 rules in one query rather than one call per rule:
 
 ```cypher
-MATCH (r:Rule)-[:PRODUCED]->(f:Finding:Signal)-[:AFFECTS]->(n)
-WHERE r.id IN ['<rule-id-1>', '<rule-id-2>'] AND f.status = 'active'
+MATCH (r:Rule)
+WHERE r.id IN ['<rule-id-1>', '<rule-id-2>']
+CALL (r) {
+  MATCH (r)-[:PRODUCED]->(f:Finding:Signal)-[:AFFECTS]->(n)
+  WHERE f.status = 'active'
+  RETURN f, n
+  ORDER BY f.first_seen DESC
+  LIMIT 25
+}
 RETURN r.id AS rule, f.id AS finding_id, f.display_name AS asset_name,
        n.id AS asset_id, labels(n) AS asset_labels, f.first_seen AS first_seen
-ORDER BY rule, asset_name
-LIMIT 200
+ORDER BY rule, first_seen DESC
 ```
+
+The per-rule subquery is what makes "top 25 most recent **per rule**" hold. A
+single global `LIMIT` ordered by name would spend the whole budget on whichever
+rule sorts first and return nothing for the rest.
 
 Collect:
 
 - resource type / cloud account / region distribution, from `asset_labels` and by traversing from the asset to its `:Tenant`
 - a few representative resource ids (use entity tags so the UI links to them)
 - the frameworks the rule belongs to, via `(r)-[:MAPS_TO]->(:Framework)` (optional context for the digest)
-- whether any are already accepted (`f.status = 'accepted'`); the query above excludes them, which is what the digest wants
+- the query above already excludes accepted findings (`f.status = 'active'`), which is what the digest wants
 
 If a rule has hundreds of findings, sample the most recent and mention the total count.
 

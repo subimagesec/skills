@@ -46,18 +46,29 @@ An Issue URL or id still resolves through `subimageGetIssue(issue_id="<ISSUE_ID>
 A CVE id or a package name resolves against the vulnerability graph, where a
 package is a `:PackageVersion` deployed on an `:Image` that a Signal affects:
 
+Pick the predicate that matches what the user gave you. Do not `OR` the two
+together: an empty `<PACKAGE_NAME>` makes `CONTAINS ''` true for every row and
+the query returns 100 unrelated signals instead of the CVE's packages.
+
+From a package name:
+
 ```cypher
 MATCH (p:PackageVersion)-[:DEPLOYED]->(i:Image)
       <-[:AFFECTS]-(v:VulnerabilitySignal:Signal)-[:INSTANCE_OF]->(m:CVEMetadata)
-WHERE v.status = 'active'
-  AND (toLower(p.name) CONTAINS toLower('<PACKAGE_NAME>')
-       OR v.cve_id = toUpper('<CVE_ID>'))
+WHERE v.status = 'active' AND toLower(p.name) CONTAINS toLower('<PACKAGE_NAME>')
 RETURN DISTINCT p.name AS package, p.version AS installed,
        p.fixed_version AS fixed_in, m.id AS cve,
        v.service_image AS service_image, i.id AS image_digest
 ORDER BY package, cve
 LIMIT 100
 ```
+
+From a CVE id, swap the predicate for `v.cve_id = toUpper('<CVE_ID>')` and keep
+the rest identical.
+
+`subimageRunCypher` takes no query parameters, so both values are inlined as
+literals: escape backslashes and single quotes first (`O'Brien` becomes
+`'O\'Brien'`), or the statement breaks on the apostrophe.
 
 Use the result to pin `<PACKAGE_NAME>`, `<PACKAGE_VERSION>`, `<PACKAGE_TYPE>`, affected `service_image`, and one or more image digests. If that is already enough evidence and the user did not ask for origin, stop there. This skill exists for the origin and reachability question.
 

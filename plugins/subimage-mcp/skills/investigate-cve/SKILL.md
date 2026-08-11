@@ -85,6 +85,10 @@ LIMIT 100
 
 A vulnerable image nobody runs is a different conversation from a vulnerable
 image on a production container, so keep the two counts distinct in the summary.
+`subimageRunCypher` takes no query parameters, so every value above is inlined
+as a literal: escape backslashes and single quotes before substituting. ARNs
+and fully-qualified GCP/Azure ids can carry either.
+
 
 ### 2. Read fixability from the record
 
