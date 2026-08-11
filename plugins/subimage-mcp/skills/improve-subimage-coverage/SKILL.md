@@ -27,7 +27,7 @@ This is the bridge between IaC reality and SubImage observability. Most other sk
 ## Prerequisites
 
 - The skill runs against the **current working directory**. Run it from the root of the IaC or scripts repo to maximize signal.
-- Uses `subimageListModules`, `subimageListRules`, `subimageGetRuleFindings`.
+- Uses `subimageListModules`, `subimageListRules`, `subimageRunCypher`.
 
 ## Workflow
 
@@ -111,7 +111,7 @@ Also note the inverse: modules enabled in SubImage that you do NOT see in the re
 subimageListRules()
 ```
 
-This returns every rule with `id`, `name`, `description`, `tags`, `findings_count`, `has_findings`, and `disabled`. There is **no** `framework` parameter; do not pass one. Findings live on rules, and each rule carries its own `tags` (theme/category) and, via `subimageGetRuleFindings`, its compliance `frameworks`. Tags are the grouping axis here, not frameworks.
+This returns every rule with `id`, `name`, `description`, `tags`, `findings_count`, `has_findings`, and `disabled`. There is **no** `framework` parameter; do not pass one. Findings live on rules, and each rule carries its own `tags` (theme/category) and, through `(:Rule)-[:MAPS_TO]->(:Framework)` in the graph, its compliance frameworks. Tags are the grouping axis here, not frameworks.
 
 Keep only rows where `has_findings` is true (`findings_count > 0`) and `disabled` is false. If that set is empty, the rule set is not producing findings yet (modules may still be syncing, or no rules are enabled): say so and skip step 5.
 
@@ -122,13 +122,19 @@ Group the kept rules by `tags` (a rule with multiple tags appears in each of its
 1. Whether the tag group ties to a slug in `detected_modules` OR a module just promoted out of the gap list (relevance to this repo wins).
 2. Findings count (desc).
 
-Take a candidate top ~8 rules, then call `subimageGetRuleFindings` on each:
+Take a candidate top ~8 rules, then pull their findings in one query. Findings
+are `:Signal` nodes in the graph, one per affected asset:
 
-```
-subimageGetRuleFindings(rule_id="<rule-id>")
+```cypher
+MATCH (r:Rule)-[:PRODUCED]->(f:Finding:Signal)-[:AFFECTS]->(n)
+WHERE r.id IN ['<rule-id-1>', '<rule-id-2>'] AND f.status = 'active'
+RETURN r.id AS rule, f.display_name AS asset_name, n.id AS asset_id,
+       labels(n) AS asset_labels
+ORDER BY rule, asset_name
+LIMIT 100
 ```
 
-Capture: severity, a few representative resources (with entity tags), account or project distribution, and (optional context) the `frameworks` the rule belongs to. Now that severity is available, re-rank by severity (critical → high → medium → low), then findings count, and keep the top 5.
+Capture: a few representative resources (with entity tags), account or project distribution, and (optional context) the frameworks the rule belongs to, via `(r)-[:MAPS_TO]->(:Framework)`. Findings carry no severity field, so keep the ranking above (repo relevance, then findings count) and take the top 5.
 
 ### 6. Output
 

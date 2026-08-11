@@ -26,7 +26,7 @@ Answers why a package exists on an image and whether "installed" means "reachabl
 |---|---|
 | `<PACKAGE_NAME>` | "Which package should I trace?" |
 | `<PACKAGE_VERSION>` | Ask only if multiple versions appear. |
-| `<PACKAGE_TYPE>` | Ask only if `subimageGetPackageDetails` reports ambiguous types. |
+| `<PACKAGE_TYPE>` | Ask only if step 1 returns the same package name under several types. |
 | `<IMAGE_DIGEST>` | Ask only if multiple affected images matter and the user did not scope one. |
 | `<CVE_ID>` or `<ISSUE_ID>` | Optional. Use it when the user starts from a CVE or Issue URL. |
 
@@ -42,13 +42,26 @@ Answers why a package exists on an image and whether "installed" means "reachabl
 
 Start with the highest-level tool that matches the user's input:
 
-- Issue URL or id: `subimageGetIssue(issue_id="<ISSUE_ID>")`.
-- CVE id: `subimageGetVulnerabilityDetails(cve_id="<CVE_ID>")`.
-- Package name: `subimageListPackages(package_name="<PACKAGE_NAME>")`, then `subimageGetPackageDetails(package_name="<PACKAGE_NAME>", package_type="<PACKAGE_TYPE>")`.
+An Issue URL or id still resolves through `subimageGetIssue(issue_id="<ISSUE_ID>")`.
+A CVE id or a package name resolves against the vulnerability graph, where a
+package is a `:PackageVersion` deployed on an `:Image` that a Signal affects:
 
-Use those results to pin `<PACKAGE_NAME>`, `<PACKAGE_VERSION>`, `<PACKAGE_TYPE>`, affected `service_image`, and one or more image digests. If the structured tool already has enough evidence and the user did not ask for origin, stop there. This skill exists for the origin and reachability question.
+```cypher
+MATCH (p:PackageVersion)-[:DEPLOYED]->(i:Image)
+      <-[:AFFECTS]-(v:VulnerabilitySignal:Signal)-[:INSTANCE_OF]->(m:CVEMetadata)
+WHERE v.status = 'active'
+  AND (toLower(p.name) CONTAINS toLower('<PACKAGE_NAME>')
+       OR v.cve_id = toUpper('<CVE_ID>'))
+RETURN DISTINCT p.name AS package, p.version AS installed,
+       p.fixed_version AS fixed_in, m.id AS cve,
+       v.service_image AS service_image, i.id AS image_digest
+ORDER BY package, cve
+LIMIT 100
+```
 
-Use the structured result for fixability and remediation versions; do not rederive them with Cypher.
+Use the result to pin `<PACKAGE_NAME>`, `<PACKAGE_VERSION>`, `<PACKAGE_TYPE>`, affected `service_image`, and one or more image digests. If that is already enough evidence and the user did not ask for origin, stop there. This skill exists for the origin and reachability question.
+
+`fixed_in` is the remediation version; take it from this result rather than rederiving it later.
 
 ### 2. Check application ownership before graph archaeology
 

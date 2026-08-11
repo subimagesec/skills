@@ -31,10 +31,11 @@ Do NOT load it for:
 
 - relationships, reachability, access, blast radius, root cause, privilege
   chains, or anything spanning two resource types (use `build-cypher-query`);
-- CVEs, packages, or fixability (`subimageListVulnerabilities` and friends);
+- CVEs, packages, fixability, findings, or attack paths: those are `:Signal`
+  nodes with their own shapes (use `signals-via-cypher`);
 - issues and action items (`subimageListIssues`);
-- compliance frameworks, rules, or findings (`subimageListFrameworks`);
-- attack paths (`subimageListAttackPaths`).
+- which compliance rules and frameworks exist or are enabled
+  (`subimageListRules`, `subimageListFrameworks`).
 
 **The mapping table below is authoritative.** For any type it covers, do not
 call `subimageListModules`, `subimageListModuleSchemaNodes`,

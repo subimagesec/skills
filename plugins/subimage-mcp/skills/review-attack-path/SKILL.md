@@ -23,12 +23,12 @@ Optional what-if simulation overlays any of the above.
 ✅ User wants a what-if: "if attacker compromises X, what happens?".
 ✅ User just finished `subimage-mcp:investigate-cve` and confirmed the pivot.
 
-❌ User wants the full path catalog: just call `subimageListAttackPaths` and summarize without going step by step.
+❌ User wants the full path catalog: just list `(:AttackPath:Signal)` and summarize without going step by step.
 ❌ User wants the static rule set behind the engine: that is `subimage-mcp:triage-new-findings` for findings, or the doc.
 
 ## Prerequisites
 
-Uses `subimageListAttackPaths`, `subimageGetAttackPathDetails`, `subimageGetAttackPathsFromAsset`, `subimageGetScenarioCapabilities`, `subimageCreateAttackPathScenario`, `subimageRunCypher` (with `subimageAgentBuildQuery` to draft queries), `subimageListModuleSchemaNodes`, and `subimageGetNodesSchema`. Ticket and notification follow-ups use `subimageListLinearTeams`, `subimageCreateTicket`, `subimageSendNotification`.
+Paths, their steps, and the n+1 probes all read the graph through `subimageRunCypher` (with `subimageAgentBuildQuery` to draft the harder queries), backed by `subimageListModuleSchemaNodes` and `subimageGetNodesSchema` for schema exploration. What-if simulation uses `subimageGetScenarioCapabilities` then `subimageCreateAttackPathScenario`, which run the engine rather than read the graph. Ticket and notification follow-ups use `subimageListLinearTeams`, `subimageCreateTicket`, `subimageSendNotification`.
 
 ## Required inputs
 
@@ -36,7 +36,7 @@ Pick one entry mode and collect the matching values. **If anything is missing, a
 
 | Entry mode | Required value | If missing, ask |
 |---|---|---|
-| Walk a known path | `<ATTACK_PATH_ID>` | "What is the attack path id? You can find it in the URL when viewing a path in SubImage, or call `subimageListAttackPaths` and pick one." |
+| Walk a known path | `<ATTACK_PATH_ID>` | "What is the attack path id? You can find it in the URL when viewing a path in SubImage, or list the active paths with Cypher and pick one (see Mode A)." |
 | Pivot from an asset | `<ASSET_ID>` (resource ARN or fully-qualified id) | "What is the asset id? Resource ARN for AWS, fully-qualified id for GCP/Azure, or the SubImage detail-page URL works." |
 | n+1 extension hunt | a starting `<ATTACK_PATH_ID>` *or* an `<ASSET_ID>` already known to be a terminal node of interest | "Where should I start the n+1 hunt: from a specific path's terminal node, or from an asset I should treat as compromised?" |
 
@@ -64,7 +64,21 @@ The graph is the source of truth. Be conservative.
 
 ### Mode A: walk a known attack path
 
-1. Call `subimageGetAttackPathDetails(attack_path_id="<ATTACK_PATH_ID>")`.
+1. Read the path's ordered steps. An attack path is an `:AttackPath:Signal` and
+   its steps hang off it by position:
+   ```cypher
+   MATCH (a:AttackPath:Signal {id: '<ATTACK_PATH_ID>'})-[h:HAS_STEP]->(s:AttackPathStep)
+   OPTIONAL MATCH (s)-[:FROM]->(src)
+   OPTIONAL MATCH (s)-[:TO]->(dst)
+   RETURN a.title AS title, a.criticality_score AS criticality,
+          h.position AS position, s.transition_id AS transition,
+          s.capability AS capability, s.description AS description,
+          collect(DISTINCT src.id) AS from_ids, collect(DISTINCT dst.id) AS to_ids
+   ORDER BY position
+   ```
+   Use `s.description`, which is the rendered step text. `s.templated_description`
+   still holds unrendered placeholders and is not for display. This result is
+   bounded by construction (one path's steps), so it takes no `LIMIT`.
 2. Decompose the path into four parts:
    - **Initial compromise**: the entry node and what gets the attacker in.
    - **Key pivots**: the 1 to 3 transitions that materially change the attacker's position (privilege gain, network reach, data access).
@@ -75,7 +89,16 @@ The graph is the source of truth. Be conservative.
 
 ### Mode B: pivot from an asset
 
-1. Call `subimageGetAttackPathsFromAsset(asset_id="<ASSET_ID>")`. SubImage returns paths sorted by criticality.
+1. Find the paths that touch the asset, at either end of any step:
+   ```cypher
+   MATCH (a:AttackPath:Signal)-[:HAS_STEP]->(:AttackPathStep)-[:FROM|TO]->(n {id: '<ASSET_ID>'})
+   WHERE a.status = 'active' AND a.context_type = 'default'
+   RETURN DISTINCT a.id AS id, a.title AS title, a.criticality_score AS criticality
+   ORDER BY criticality DESC, id
+   LIMIT 20
+   ```
+   Filter `context_type = 'default'` unless the user asked about a rule context
+   or a saved scenario; otherwise the same path comes back once per context.
 2. If empty: "No known attack path involves `<ASSET_ID>` right now. The asset may still be at risk via paths the engine has not modeled. Want me to run the n+1 extension hunt (Mode C) starting from this asset?"
 3. If non-empty: pick the top 1 to 3, run Mode A on each.
 
