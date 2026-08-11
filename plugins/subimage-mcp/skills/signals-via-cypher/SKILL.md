@@ -109,6 +109,7 @@ MATCH (r:Rule)-[:PRODUCED]->(f:Finding:Signal)-[:AFFECTS]->(n {id: 'i-eval-publi
 WHERE f.status = 'active'
 RETURN r.id AS rule, r.name AS rule_name, f.id AS finding_id
 ORDER BY rule
+LIMIT 100
 ```
 
 Posture for one framework:
@@ -178,6 +179,7 @@ WHERE v.status = 'active'
 RETURN DISTINCT v.cve_id AS cve, m.base_score AS cvss_score,
        coalesce(m.is_kev, false) AS kev, m.cisa_exploit_add AS kev_date
 ORDER BY cvss_score DESC
+LIMIT 100
 ```
 
 Where a CVE actually runs:
@@ -267,8 +269,11 @@ Prefer `s.description`, which is the rendered step text.
 
 - One self-contained read-only statement per `subimageRunCypher` call. No `//`
   comments, no parameters, no semicolon.
-- Always filter `status`, and always `LIMIT` a listing (100 unless asked for
-  more).
+- Always filter `status`.
+- Always `LIMIT` a listing whose size grows with the environment (100 unless
+  asked for more). A result bounded by construction, such as the ordered steps
+  of one attack path, takes no `LIMIT`: capping it would truncate the chain
+  mid-way and the partial answer would read as the whole one.
 - Return the Signal's `id` on every query that returns one row per Signal, so
   the answer can be tagged and drilled into. An aggregate returns the grouping
   key and the count instead.
