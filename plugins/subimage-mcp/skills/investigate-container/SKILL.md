@@ -49,7 +49,7 @@ Run the § Image Provenance queries from the templates, threading the resolved `
 2. **Registry repository**: ECR / GCP Artifact Registry / GitLab.
 3. **Running workloads**: Containers (`state = 'running'`) → Pod → Service for cluster-backed providers, or Container → Service directly for serverless (Cloud Run); plus Functions.
 4. **Source origin**: `PACKAGED_FROM` → GitHub repo + Dockerfile path.
-5. **Vulnerabilities**: `:VulnerabilitySignal:Signal` affecting the image, via the Step 5 CVE template.
+5. **Vulnerabilities**: `:VulnerabilitySignal:Signal` affecting the image, via the Step 5 CVE template. The template returns both open and accepted rows, so bucket them by the `status` column: an accepted CVE is one a human signed off on, and folding it into the open count overstates the backlog. Omit the `+<n> accepted` clause when there are none.
 
 ### Mode 2: Cluster exposure
 
@@ -71,7 +71,7 @@ In-chat report (no file output). Tag resources with `[[entity:<Label>:<id>|<name
 - registry: [[entity:ECRRepository:<id>|<name>]]
 - running workloads: [[entity:Container:<id>|<name>]] in pod <…> / service <…> (+<rest>)
 - source: [[entity:GitHubRepository:<id>|<org/repo>]] (Dockerfile <path>)
-- vulns: <n> CVEs (<n> critical, <n> high); top: <CVE> (CVSS <x>, KEV <y/n>)
+- vulns: <n> open CVEs (<n> critical, <n> high)<, +<n> accepted>; top: <CVE> (CVSS <x>, KEV <y/n>)
 
 ## (Mode 2) Cluster exposure
 - overview: API public access <y/n>, version <…>, region <…>

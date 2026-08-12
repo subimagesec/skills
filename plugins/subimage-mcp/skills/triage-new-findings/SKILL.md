@@ -94,7 +94,7 @@ Collect:
 - the frameworks the rule belongs to, via `(r)-[:MAPS_TO]->(:Framework)`, whose id is `{short_name}:{scope}` such as `cis:aws` or `soc2:tsc` (optional context for the digest)
 - the query filters `f.status = 'active'`, which drops findings whose risk a human accepted. That is a deliberate narrowing for a "what is open" digest, and it is narrower than the product's own finding reads, which return active and accepted and label the accepted ones. Widen to `IN ['active','accepted']` if the user asks what the rule currently matches rather than what is on their plate.
 
-If a rule has hundreds of findings, sample the most recent and mention the total count from the `total_count` the tool returns.
+If a rule has hundreds of findings, sample the most recent and mention the total from that rule's `findings_count` in step 1's `subimageListRules()`. Do not use the query's own row count: the per-rule `LIMIT 20` caps it, so it reports the sample size, not the total.
 
 ### 4. Group and prioritize
 

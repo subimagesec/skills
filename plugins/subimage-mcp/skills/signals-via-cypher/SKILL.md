@@ -215,7 +215,7 @@ WHERE v.cve_id = toUpper('cve-2026-11111')
   AND (rt:Container OR rt:Function)
   AND (NOT rt:Container OR rt._ont_state = 'running')
 RETURN DISTINCT rt.id AS runtime_id, coalesce(rt._ont_name, rt.name) AS name,
-       labels(rt) AS labels, i.id AS image
+       labels(rt) AS labels, i.id AS image, v.status AS status
 LIMIT 100
 ```
 
