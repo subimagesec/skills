@@ -156,18 +156,35 @@ Everything failing on one asset:
 MATCH (r:Rule)-[:PRODUCED]->(f:Finding:Signal)
 WHERE f.status = 'active'
   AND (EXISTS { (f)-[:AFFECTS {role: 'primary'}]->({id: 'i-eval-public'}) }
-       OR f.fields_json CONTAINS '"i-eval-public"')
+       OR (NOT EXISTS { (f)-[:AFFECTS {role: 'primary'}]->() }
+           AND f.fields_json CONTAINS '"i-eval-public"'))
 RETURN r.id AS rule, r.name AS rule_name, f.id AS finding_id,
-       f.display_name AS asset_name
+       f.display_name AS asset_name,
+       EXISTS { (f)-[:AFFECTS {role: 'primary'}]->() } AS edge_backed
 ORDER BY rule
 LIMIT 100
 ```
 
 Here the asset is the filter, not a returned column, so it cannot be optional.
-The `fields_json` arm is what keeps edgeless Findings for this asset in the
-result; without it the query answers "what fails on this asset **and still has
-its edge**", which reads as a clean asset when it is not. Quote the id inside the
-`CONTAINS` so a short id does not match a longer one by prefix.
+The second arm is what keeps edgeless Findings for this asset in the result;
+without it the query answers "what fails on this asset **and still has its
+edge**", which reads as a clean asset when it is not.
+
+Both guards on that arm are load-bearing:
+
+- **`NOT EXISTS` on any primary edge** confines the fallback to Findings with no
+  asset at all. `fields_json` is the fact's whole output model, so it routinely
+  carries ids other than the asset's own (a peer resource, a subnet, an image).
+  Without this guard, a Finding already resolved to a *different* asset gets
+  re-reported as failing on this one.
+- **Quoting the id inside the `CONTAINS`** stops a short id from matching a longer
+  one by prefix.
+
+One imprecision survives and cannot be closed in Cypher: an edgeless Finding that
+mentions this id as context rather than as its own asset still matches. `fields_json`
+key names are not standardized, so nothing distinguishes the two here. `edge_backed`
+marks which rows came from the edge, so treat the false ones as candidates and
+confirm against the JSON before naming them.
 
 Posture for one framework:
 
