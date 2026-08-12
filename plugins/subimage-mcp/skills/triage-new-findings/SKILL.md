@@ -65,14 +65,16 @@ digest reads as if they had no findings.
 MATCH (r:Rule)
 WHERE r.id IN ['<rule-id-1>', '<rule-id-2>']
 CALL (r) {
-  MATCH (r)-[:PRODUCED]->(f:Finding:Signal)-[:AFFECTS {role: 'primary'}]->(n)
+  MATCH (r)-[:PRODUCED]->(f:Finding:Signal)
   WHERE f.status = 'active'
-  RETURN f, n
+  RETURN f
   ORDER BY f.first_seen DESC
   LIMIT 20
 }
+OPTIONAL MATCH (f)-[:AFFECTS {role: 'primary'}]->(n)
 RETURN r.id AS rule, f.id AS finding_id, f.display_name AS asset_name,
-       n.id AS asset_id, labels(n) AS asset_labels, f.first_seen AS first_seen
+       n.id AS asset_id, labels(n) AS asset_labels,
+       f.fields_json AS fields_json, f.first_seen AS first_seen
 ORDER BY rule, first_seen DESC
 ```
 
@@ -80,9 +82,19 @@ The per-rule subquery is what makes "top 20 most recent **per rule**" hold. A
 single global `LIMIT` ordered by name would spend the whole budget on whichever
 rule sorts first and return nothing for the rest.
 
+**The asset match has to stay optional and stay outside the subquery.** A large
+standing fraction of active Findings has no `AFFECTS` edge, because the edge is
+only merged on create or update and an asset deleted then re-created under the
+same id never gets it back. A mandatory match drops those Findings silently, so
+the digest under-reports the backlog while looking complete. Selecting `f` first
+also means the `LIMIT` counts Findings rather than joined rows.
+
+When `asset_id` is null, the asset id is still in `fields_json` (the rule spec
+requires an asset-id field) and `display_name` still names it. Read the id out of
+the JSON yourself; the key name is not standardized.
+
 `first_seen` is a graph temporal, so `ORDER BY` on it is chronological rather
-than lexicographic. `role: 'primary'` is the only role written on a finding's
-`AFFECTS`, so naming it changes no results; it just states which edge is meant.
+than lexicographic.
 
 If more than 5 rules deserve a look, run the query again with the next batch
 rather than widening one call.

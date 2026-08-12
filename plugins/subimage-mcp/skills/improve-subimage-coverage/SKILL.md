@@ -130,14 +130,16 @@ globally:
 MATCH (r:Rule)
 WHERE r.id IN ['<rule-id-1>', '<rule-id-2>']
 CALL (r) {
-  MATCH (r)-[:PRODUCED]->(f:Finding:Signal)-[:AFFECTS {role: 'primary'}]->(n)
+  MATCH (r)-[:PRODUCED]->(f:Finding:Signal)
   WHERE f.status = 'active'
-  RETURN f, n
+  RETURN f
   ORDER BY f.first_seen DESC
   LIMIT 12
 }
+OPTIONAL MATCH (f)-[:AFFECTS {role: 'primary'}]->(n)
 RETURN r.id AS rule, f.display_name AS asset_name, n.id AS asset_id,
-       labels(n) AS asset_labels, f.first_seen AS first_seen
+       labels(n) AS asset_labels, f.fields_json AS fields_json,
+       f.first_seen AS first_seen
 ORDER BY rule, asset_name
 ```
 
@@ -146,6 +148,12 @@ ORDER BY rule, asset_name
 global `LIMIT 100` ordered by rule name would let one noisy rule consume the
 entire budget, leaving every other rule looking clean when it is not. Keep the
 `CALL (r) { ... }` subquery; that is what makes the slice per rule.
+
+Keep the asset match optional and outside the subquery. A large standing fraction
+of active Findings has no `AFFECTS` edge, so a mandatory match would silently drop
+them and make a rule look better covered than it is. Selecting `f` first also
+keeps the `LIMIT` counting Findings rather than joined rows. When `asset_id` is
+null, take the id from `fields_json` and the name from `display_name`.
 
 Capture: a few representative resources (with entity tags), account or project distribution, and (optional context) the frameworks the rule belongs to, via `(r)-[:MAPS_TO]->(:Framework)`, whose id is `{short_name}:{scope}` such as `cis:aws` or `soc2:tsc`. Findings carry no severity field, so keep the ranking above (repo relevance, then findings count) and take the top 5.
 

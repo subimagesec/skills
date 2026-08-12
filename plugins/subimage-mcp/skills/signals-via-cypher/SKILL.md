@@ -82,7 +82,8 @@ something never happened.
 ## Findings and compliance
 
 ```text
-(:Rule)-[:PRODUCED]->(:Finding:Signal)-[:AFFECTS {role}]->(resource)
+(:Rule)-[:PRODUCED]->(:Finding:Signal)
+(:Finding:Signal)-[:AFFECTS {role: 'primary'}]->(resource)   // may be absent
 (:Rule)-[:MAPS_TO]->(:Framework)
 ```
 
@@ -99,10 +100,31 @@ of counting Findings, which counts observations rather than assets.
 `fields_json` and `extra_json` are canonical JSON strings, not maps: return them
 whole and read them yourself rather than trying to index into them in Cypher.
 
-`AFFECTS` carries `role`, and `'primary'` is the only value ever written: exactly
-one primary edge per Finding, pointing at the asset the rule failed on. Matching
-`-[:AFFECTS {role: 'primary'}]->` is therefore documentation rather than a
-filter, but it makes the intent explicit.
+**`AFFECTS` is not guaranteed to exist, so never match it with a plain `MATCH`.**
+`'primary'` is the only `role` ever written, but the edge is only merged on a
+create or an update: an unchanged Finding never re-merges it, and "unchanged" is
+judged by a fingerprint stored on the Finding that does not observe the edge. So
+when a resource node is deleted and later re-created under the same id, the
+`AFFECTS` edge is gone for good while the Finding stays active. A large standing
+fraction of active Findings has no edge at all, and a mandatory match drops every
+one of them without a trace.
+
+Three consequences to build queries around:
+
+- **`OPTIONAL MATCH` the asset, always.** Select and `LIMIT` the Findings first,
+  then attach the asset. Putting the asset in the driving `MATCH` also makes the
+  `LIMIT` count joined rows instead of Findings.
+- **`fields_json` is the fallback identity.** The rule spec requires an
+  asset-id field, so the affected asset's id is always in there even when the
+  edge is not. Return `fields_json` (and `extra_json`) alongside `n.id` so an
+  edgeless row is still actionable. The key name is not standardized, so read it
+  yourself rather than trying to index into the JSON in Cypher.
+- **`display_name` is always populated**, so an edgeless Finding still names its
+  asset in prose even when `n` is null.
+
+None of the product's own finding reads traverse `AFFECTS`; they return Finding
+properties only. Requiring the edge is stricter than the product, not equivalent
+to it.
 
 The finding examples below filter `active` alone, which is a deliberate
 narrowing: they answer "what is open". Note that this is narrower than the
@@ -113,22 +135,39 @@ is on my plate".
 Findings for one rule:
 
 ```cypher
-MATCH (r:Rule {id: 'object_storage_public'})-[:PRODUCED]->(f:Finding:Signal)-[:AFFECTS]->(n)
+MATCH (r:Rule {id: 'object_storage_public'})-[:PRODUCED]->(f:Finding:Signal)
 WHERE f.status = 'active'
-RETURN f.id AS id, f.display_name AS asset_name, n.id AS asset_id, labels(n) AS asset_labels
-ORDER BY asset_name
+WITH f
+ORDER BY f.display_name
 LIMIT 100
+OPTIONAL MATCH (f)-[:AFFECTS {role: 'primary'}]->(n)
+RETURN f.id AS id, f.display_name AS asset_name, n.id AS asset_id,
+       labels(n) AS asset_labels, f.fields_json AS fields_json
+ORDER BY asset_name
 ```
+
+The `LIMIT` sits on the Findings, before the asset is attached, so it caps
+Findings rather than joined rows. A null `asset_id` is an edgeless Finding, not an
+absent one: fall back to `fields_json` for its asset id.
 
 Everything failing on one asset:
 
 ```cypher
-MATCH (r:Rule)-[:PRODUCED]->(f:Finding:Signal)-[:AFFECTS]->(n {id: 'i-eval-public'})
+MATCH (r:Rule)-[:PRODUCED]->(f:Finding:Signal)
 WHERE f.status = 'active'
-RETURN r.id AS rule, r.name AS rule_name, f.id AS finding_id
+  AND (EXISTS { (f)-[:AFFECTS {role: 'primary'}]->({id: 'i-eval-public'}) }
+       OR f.fields_json CONTAINS '"i-eval-public"')
+RETURN r.id AS rule, r.name AS rule_name, f.id AS finding_id,
+       f.display_name AS asset_name
 ORDER BY rule
 LIMIT 100
 ```
+
+Here the asset is the filter, not a returned column, so it cannot be optional.
+The `fields_json` arm is what keeps edgeless Findings for this asset in the
+result; without it the query answers "what fails on this asset **and still has
+its edge**", which reads as a clean asset when it is not. Quote the id inside the
+`CONTAINS` so a short id does not match a longer one by prefix.
 
 Posture for one framework:
 
@@ -369,6 +408,11 @@ not for display.
   exist there; that question belongs to the history tools.
 - Reporting a severity read straight off `m.base_severity` without the score
   fallback: it is null for some CVEs and the answer silently drops them.
+- Matching a Finding's `AFFECTS` with a plain `MATCH`. The edge is frequently
+  missing on active Findings, so this drops them with no sign in the result. Use
+  `OPTIONAL MATCH` and fall back to `fields_json`.
+- Putting the asset in the driving `MATCH` of a limited findings query. The
+  `LIMIT` then counts joined rows, not Findings.
 - Reading a fix version off `PackageVersion`. The property does not exist, so
   every row comes back null and the answer becomes "nothing is fixable".
 - Associating a package with a CVE because both sit on the same image. The join
@@ -391,6 +435,9 @@ query rather than implying the page is the whole set.
 - The query filtered `status`, and narrowed to `active` alone only on purpose.
 - The query cannot produce more than 100 rows, or the answer quotes
   `total_count` instead of presenting the page as the whole set.
+- Any Finding-to-asset traversal is an `OPTIONAL MATCH` applied after the
+  Findings were selected and limited, and the answer treats a null asset as an
+  edgeless Finding rather than dropping the row.
 - One `subimageRunCypher` call answered it; two means the first was wrong or a
   count follow-up was genuinely needed.
 - A severity or KEV claim came from `CVEMetadata`, and a fix version from
