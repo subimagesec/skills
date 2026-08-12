@@ -43,8 +43,15 @@ Answers why a package exists on an image and whether "installed" means "reachabl
 Start with the highest-level tool that matches the user's input:
 
 An Issue URL or id still resolves through `subimageGetIssue(issue_id="<ISSUE_ID>")`.
-A CVE id or a package name resolves against the vulnerability graph, where a
-package is a `:PackageVersion` deployed on an `:Image` that a Signal affects:
+A CVE id or a package name resolves against the vulnerability graph. A package is
+a `:PackageVersion`, and it is tied to a CVE through the scanner's finding, not
+by sitting on the same image:
+
+```text
+(:CVEMetadata)-[:ENRICHES]->(:TrivyImageFinding:CVE)-[:AFFECTS]->(:PackageVersion)
+(:PackageVersion)-[:DEPLOYED]->(:Image)
+(:PackageVersion)-[:SHOULD_UPDATE_TO]->(:TrivyFix)-[:APPLIES_TO]->(:TrivyImageFinding)
+```
 
 Pick the predicate that matches what the user gave you. Do not `OR` the two
 together: an empty `<PACKAGE_NAME>` makes `CONTAINS ''` true for every row and
@@ -53,26 +60,45 @@ the query returns 100 unrelated signals instead of the CVE's packages.
 From a package name:
 
 ```cypher
-MATCH (p:PackageVersion)-[:DEPLOYED]->(i:Image)
-      <-[:AFFECTS]-(v:VulnerabilitySignal:Signal)-[:INSTANCE_OF]->(m:CVEMetadata)
-WHERE v.status = 'active' AND toLower(p.name) CONTAINS toLower('<PACKAGE_NAME>')
-RETURN DISTINCT p.name AS package, p.version AS installed,
-       p.fixed_version AS fixed_in, m.id AS cve,
+MATCH (v:VulnerabilitySignal:Signal)-[:AFFECTS]->(i:Image)
+MATCH (v)-[:INSTANCE_OF]->(m:CVEMetadata)
+      -[:ENRICHES]->(f:TrivyImageFinding:CVE)-[:AFFECTS]->(p:PackageVersion)
+WHERE v.status IN ['active', 'accepted']
+  AND toLower(p.name) CONTAINS toLower('<PACKAGE_NAME>')
+  AND EXISTS { (p)-[:DEPLOYED]->(i) }
+OPTIONAL MATCH (p)-[:SHOULD_UPDATE_TO]->(fix:TrivyFix)-[:APPLIES_TO]->(f)
+RETURN DISTINCT p.name AS package, p.version AS installed, p.type AS package_type,
+       fix.version AS fixed_in, m.id AS cve, v.status AS status,
        v.service_image AS service_image, i.id AS image_digest
 ORDER BY package, cve
 LIMIT 100
 ```
 
-From a CVE id, swap the predicate for `v.cve_id = toUpper('<CVE_ID>')` and keep
-the rest identical.
+From a CVE id, swap the package predicate for `v.cve_id = toUpper('<CVE_ID>')` and
+keep the rest identical.
+
+Three joins carry the correctness here, and dropping any of them produces
+plausible-looking rows that are wrong:
+
+- **`ENRICHES` then `AFFECTS` onto `p`** is what associates the package with the
+  CVE. Matching `(p)-[:DEPLOYED]->(i)<-[:AFFECTS]-(v)` instead pairs every package
+  on an image with every CVE on that image, which on a real image is tens of
+  thousands of false pairs.
+- **`EXISTS { (p)-[:DEPLOYED]->(i) }`** scopes those packages to an image this
+  Signal actually affects. `ENRICHES` alone reaches every occurrence of the CVE
+  across the fleet.
+- **`APPLIES_TO` back onto `f`** scopes the fix to this CVE. A package carries one
+  `SHOULD_UPDATE_TO` edge per fix across all of its CVEs, so an unclosed triangle
+  reports another CVE's fix version. Note also that there is no `fixed_version`
+  property on `PackageVersion`: the fix version is `TrivyFix.version`.
 
 `subimageRunCypher` takes no query parameters, so both values are inlined as
 literals: escape backslashes and single quotes first (`O'Brien` becomes
 `'O\'Brien'`), or the statement breaks on the apostrophe.
 
-Use the result to pin `<PACKAGE_NAME>`, `<PACKAGE_VERSION>`, `<PACKAGE_TYPE>`, affected `service_image`, and one or more image digests. If that is already enough evidence and the user did not ask for origin, stop there. This skill exists for the origin and reachability question.
+Use the result to pin `<PACKAGE_NAME>`, `<PACKAGE_VERSION>`, `<PACKAGE_TYPE>` (the `package_type` column), affected `service_image`, and one or more image digests. If that is already enough evidence and the user did not ask for origin, stop there. This skill exists for the origin and reachability question.
 
-`fixed_in` is the remediation version; take it from this result rather than rederiving it later.
+`fixed_in` is the remediation version; take it from this result rather than rederiving it later. A null means no fix is published, which is a finding in itself, not a row to drop.
 
 ### 2. Check application ownership before graph archaeology
 
