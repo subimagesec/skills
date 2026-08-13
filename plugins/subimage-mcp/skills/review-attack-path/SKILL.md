@@ -44,7 +44,7 @@ For a what-if scenario, also collect:
 
 | Value | If missing, ask |
 |---|---|
-| `<NODE_LABEL>` | "Which node label is the starting point? (e.g. `EC2Instance`, `S3Bucket`, `User`)." |
+| `<NODE_LABEL>` | "Which node label is the starting point? (e.g. `AWSEC2Instance`, `AWSS3Bucket`, `User`)." |
 | Capabilities to grant | "Which attacker capabilities should I simulate? Run `subimageGetScenarioCapabilities` first to see what is valid for this node label." |
 
 ## Posture (read this before calling any tool)
