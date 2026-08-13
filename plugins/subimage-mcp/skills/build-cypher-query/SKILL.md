@@ -38,7 +38,6 @@ Only these are addressed by this skill; nothing else.
 | `subimageListModules()` | Confirms which modules are synced before querying their labels. |
 | `subimageListModuleSchemaNodes(module=...)` | Discovers candidate labels for a given module when you don't know them. |
 | `subimageGetNodesSchema(node_names=[...])` | Returns the validated label, property, and relationship surface for a list of labels. |
-| `subimageGetLabelStats(labels=[...])` | Returns cardinality per label; check when you suspect a label is high-cardinality (>10 000 nodes) and your query does not filter early. |
 | `subimageRunCypher(query)` | Executes one Cypher statement. Streams to the UI as an interactive table. |
 
 ## Workflow
@@ -62,13 +61,12 @@ With the labels in hand, fire these calls on a single turn:
 
 - `searchModelQueries(labels=[...])` — looks up cached example queries for these labels. If a hit matches the question's shape, adapt it instead of authoring from scratch. (This is **not** label discovery — it requires the labels as input.)
 - `subimageGetNodesSchema(node_names=["LabelA", "LabelB", ...])` — batches every label into one call. Returns the validated properties and relationships, including authoritative relationship examples and direction. Resolves both primary labels and ontology aliases.
-- `subimageGetLabelStats(labels=[...])` — only if you suspect a label is high-cardinality and your draft will not filter on it early.
 
 Then either adapt the cached query or author one from the schema. Before writing Cypher, extract the exact relationship pattern from the schema examples for every hop. Apply the **Final query rules** below.
 
 ### Step 3 — Optional probe (at most one)
 
-If after step 2 you are still uncertain about a property's actual values, the path's shape, relationship direction, or whether matching rows exist, run **one** probe with `subimageRunCypher` using `LIMIT 5` or `COUNT(*)`. Prefer `toLower(...) CONTAINS ...` for text discovery.
+If after step 2 you are still uncertain about a property's actual values, the path's shape, relationship direction, label cardinality, or whether matching rows exist, run **one** probe with `subimageRunCypher` using `LIMIT 5` or `COUNT(*)`. Prefer `toLower(...) CONTAINS ...` for text discovery. When cardinality materially affects the query plan and the draft cannot filter early, use `MATCH (n:<ValidatedLabel>) RETURN count(n) AS node_count`; do not add a separate count when the final query already filters the label.
 
 For relationship-direction uncertainty, keep the probe bounded and typed. Use the same validated labels and relationship type in an undirected diagnostic pattern, return `labels(startNode(r))`, `type(r)`, `labels(endNode(r))`, and key IDs, then correct the final query to the directed schema shape. Do not leave the final query undirected unless direction is genuinely irrelevant and the query deduplicates rows.
 
@@ -129,7 +127,7 @@ Simplify before running:
 - Reformatting `subimageRunCypher` results as a markdown table. The tool streams an interactive table; summarize, do not duplicate.
 - Looping speculative probes ("try this, no, try that"). One probe with `LIMIT 5` or `COUNT(*)`, then commit.
 - Pre-loading the full schema "just in case" via `subimageListModuleSchemaNodes` on every module. Only enumerate modules when the labels are genuinely unknown.
-- Calling `subimageGetLabelStats` for every query. Only check when a label is plausibly large and your query does not already filter it.
+- Running a separate cardinality query for every request. Use the one optional probe only when label size materially affects the query plan and the final query cannot filter early.
 - Building virtual nodes or relationships (`apoc.create.vNode` / `apoc.create.vRelationship`) to "visualize" a derived relationship.
 
 ## Special cases
