@@ -25,7 +25,8 @@ Do NOT load it for:
   `subimageGetRuleHistory` and `subimageGetFrameworkHistory`.
 - **what is configured**: which rules or frameworks exist, are enabled, or are
   tenant-authored. Those join operator state Cypher cannot read. Use
-  `subimageListRules`, `subimageListCustomRules`, `subimageListFrameworks`.
+  `subimageListRules` (`view="custom_definitions"` for tenant-authored Cypher),
+  `subimageListFrameworks`.
 - **remediation work**: issues and action items (`subimageListIssues`,
   `subimageGetIssue`, `subimageListVulnerabilityActionItems`).
 - **flat resource inventory** of one resource type: use `inventory-via-cypher`.
