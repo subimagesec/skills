@@ -49,7 +49,7 @@ LIMIT 10
 
 ```cypher
 MATCH (img:Image) WHERE img.id = '<IMAGE_ID>'
-OPTIONAL MATCH (img)<-[:IMAGE]-(ecr:ECRRepositoryImage)<-[:REPO_IMAGE]-(repo:ECRRepository)
+OPTIONAL MATCH (img)<-[:IMAGE]-(ecr:AWSECRRepositoryImage)<-[:REPO_IMAGE]-(repo:AWSECRRepository)
 OPTIONAL MATCH (img)<-[:IMAGE]-(gar:GCPArtifactRegistryRepositoryImage)<-[:REPO_IMAGE]-(garRepo:GCPArtifactRegistryRepository)
 OPTIONAL MATCH (img)<-[:REFERENCES]-(gitTag:GitLabContainerRepositoryTag)<-[:HAS_TAG]-(gitRepo:GitLabContainerRepository)
 RETURN img.id AS image_id,
@@ -144,7 +144,7 @@ property does not exist and returns null on every row.
 
 ```cypher
 MATCH (c:KubernetesCluster) WHERE c.name = '<CLUSTER_NAME>'
-OPTIONAL MATCH (eks:EKSCluster)-[:MAPS_TO]->(c)
+OPTIONAL MATCH (eks:AWSEKSCluster)-[:MAPS_TO]->(c)
 RETURN c.name AS cluster, c.id AS cluster_id,
        eks.name AS eks_cluster, eks.region AS region,
        eks.exposed_internet AS eks_api_exposed,
@@ -188,12 +188,12 @@ LIMIT 500
 
 ### Backing nodes with public IPs (running EC2 only)
 
-`KubernetesNode` has no edge or shared key to `EC2Instance` in the schema (only `RESOURCE`→cluster and `RUNS_ON`↔pod), so joining the two produces a cartesian product and inflates counts. Report the cluster's internet-exposed backing instances from the EC2 side instead, without a node-name join:
+`KubernetesNode` has no edge or shared key to `AWSEC2Instance` in the schema (only `RESOURCE`→cluster and `RUNS_ON`↔pod), so joining the two produces a cartesian product and inflates counts. Report the cluster's internet-exposed backing instances from the EC2 side instead, without a node-name join:
 
 ```cypher
 MATCH (c:KubernetesCluster) WHERE c.name = '<CLUSTER_NAME>'
-MATCH (eks:EKSCluster)-[:MAPS_TO]->(c)
-MATCH (ec2:EC2Instance)-[:MEMBER_OF_EKS_CLUSTER]->(eks)
+MATCH (eks:AWSEKSCluster)-[:MAPS_TO]->(c)
+MATCH (ec2:AWSEC2Instance)-[:MEMBER_OF_EKS_CLUSTER]->(eks)
 WHERE ec2.state = 'running' AND ec2.publicipaddress IS NOT NULL
 RETURN ec2.instanceid AS ec2_instance, ec2.publicipaddress AS public_ip,
        ec2.exposed_internet AS ec2_exposed, ec2.region AS region
@@ -220,8 +220,8 @@ LIMIT 500
 Per-cluster reconciliation with anomaly flags:
 
 ```cypher
-MATCH (a:AWSAccount)-[:RESOURCE]->(eks:EKSCluster)
-OPTIONAL MATCH (ec2:EC2Instance)-[:MEMBER_OF_EKS_CLUSTER]->(eks)
+MATCH (a:AWSAccount)-[:RESOURCE]->(eks:AWSEKSCluster)
+OPTIONAL MATCH (ec2:AWSEC2Instance)-[:MEMBER_OF_EKS_CLUSTER]->(eks)
 WITH a, eks,
   count(ec2) AS total_nodes,
   count(CASE WHEN ec2.state = 'running' THEN 1 END) AS running_nodes,
@@ -245,7 +245,7 @@ LIMIT 200
 Correct node-count pattern for any "how many nodes" question:
 
 ```cypher
-MATCH (ec2:EC2Instance)-[:MEMBER_OF_EKS_CLUSTER]->(eks:EKSCluster)
+MATCH (ec2:AWSEC2Instance)-[:MEMBER_OF_EKS_CLUSTER]->(eks:AWSEKSCluster)
 WHERE ec2.state = 'running'
 RETURN eks.name AS cluster, count(ec2) AS node_count
 ORDER BY eks.name

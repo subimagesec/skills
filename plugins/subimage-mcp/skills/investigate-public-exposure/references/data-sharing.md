@@ -24,7 +24,7 @@ LIMIT 100
 ## Public EC2 image
 
 ```cypher
-MATCH (image:EC2Image)
+MATCH (image:AWSEC2Image)
 WHERE image.id = $value OR image.name = $value
 RETURN labels(image) AS image_labels,
        image.id AS image_id,

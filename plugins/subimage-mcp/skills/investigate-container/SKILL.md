@@ -37,7 +37,7 @@ One skill, three investigation modes over container/Kubernetes data in the SubIm
 
 ## Reusable correctness note (applies to Modes 1-3)
 
-The graph retains `EC2Instance` nodes with `state != 'running'` (terminated/stopped) that still carry `MEMBER_OF_EKS_CLUSTER` edges. **Any** count or listing of cluster nodes must filter `WHERE ec2.state = 'running'`, or it over-reports. This is the whole of Mode 3 and a guardrail for the node parts of Mode 2.
+The graph retains `AWSEC2Instance` nodes with `state != 'running'` (terminated/stopped) that still carry `MEMBER_OF_EKS_CLUSTER` edges. **Any** count or listing of cluster nodes must filter `WHERE ec2.state = 'running'`, or it over-reports. This is the whole of Mode 3 and a guardrail for the node parts of Mode 2.
 
 ## Workflow
 
@@ -53,7 +53,7 @@ Run the § Image Provenance queries from the templates, threading the resolved `
 
 ### Mode 2: Cluster exposure
 
-Resolve the cluster first: if the user gives an EKS name, map it to the backing `KubernetesCluster` via `(:EKSCluster)-[:MAPS_TO]->(:KubernetesCluster)`. If the cluster is not found, say so and stop. Then run the § Cluster Exposure queries: cluster overview, namespaces, internet-exposed services (LoadBalancer/NodePort or `exposed_internet=true`), ingress, backing nodes with public IPs (reported from the running `EC2Instance` side, since `KubernetesNode` has no reliable join key to EC2), and all `exposed_internet=true` objects.
+Resolve the cluster first: if the user gives an EKS name, map it to the backing `KubernetesCluster` via `(:AWSEKSCluster)-[:MAPS_TO]->(:KubernetesCluster)`. If the cluster is not found, say so and stop. Then run the § Cluster Exposure queries: cluster overview, namespaces, internet-exposed services (LoadBalancer/NodePort or `exposed_internet=true`), ingress, backing nodes with public IPs (reported from the running `AWSEC2Instance` side, since `KubernetesNode` has no reliable join key to EC2), and all `exposed_internet=true` objects.
 
 ### Mode 3: Node reconciliation
 
@@ -68,7 +68,7 @@ In-chat report (no file output). Tag resources with `[[entity:<Label>:<id>|<name
 
 ## (Mode 1) Image provenance
 - identity: digest <…>, tags <…>
-- registry: [[entity:ECRRepository:<id>|<name>]]
+- registry: [[entity:AWSECRRepository:<id>|<name>]]
 - running workloads: [[entity:Container:<id>|<name>]] in pod <…> / service <…> (+<rest>)
 - source: [[entity:GitHubRepository:<id>|<org/repo>]] (Dockerfile <path>)
 - vulns: <n> open CVEs (<n> critical, <n> high)<, +<n> accepted>; top: <CVE> (CVSS <x>, KEV <y/n>)
@@ -77,11 +77,11 @@ In-chat report (no file output). Tag resources with `[[entity:<Label>:<id>|<name
 - overview: API public access <y/n>, version <…>, region <…>
 - exposed services: <n> (LoadBalancer/NodePort): [[entity:KubernetesService:<id>|<name>]] (+<rest>)
 - ingress: <n>: hosts <…>
-- backing public-IP instances (running): <n>: [[entity:EC2Instance:<id>|<id>]] <public-ip>
+- backing public-IP instances (running): <n>: [[entity:AWSEC2Instance:<id>|<id>]] <public-ip>
 - exposed_internet=true objects: <n>
 
 ## (Mode 3) EKS node reconciliation
-- [[entity:EKSCluster:<id>|<name>]]: running <r>, stale <s>, total <t> → <anomaly_level>
+- [[entity:AWSEKSCluster:<id>|<name>]]: running <r>, stale <s>, total <t> → <anomaly_level>
 - stale edges: i-… (terminated), i-… (stopped) (+<rest>)
 
 ## Summary / risk notes
@@ -91,7 +91,7 @@ In-chat report (no file output). Tag resources with `[[entity:<Label>:<id>|<name
 ## Anti-patterns
 
 - Counting cluster nodes without `WHERE ec2.state = 'running'`. This is the documented cause of inflated counts; always filter.
-- Trusting a template label/relationship without schema-validating it. Container/K8s labels (`Image`, `Container`, `ComputePod`, `KubernetesService`, `EKSCluster`) drift; an unvalidated `MATCH` silently returns nothing.
+- Trusting a template label/relationship without schema-validating it. Container/K8s labels (`Image`, `Container`, `ComputePod`, `KubernetesService`, `AWSEKSCluster`) drift; an unvalidated `MATCH` silently returns nothing.
 - Reading severity off `m.severity` or KEV off `m.kev`. The properties are `base_severity` (null often enough to need the score fallback) and `is_kev`.
 - Running all three modes when the user asked about one. Pick the mode; offer the others as follow-ups.
 - Reformatting raw query output as a wall-of-text table. Summarize and tag the notable resources.

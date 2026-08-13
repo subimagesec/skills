@@ -4,14 +4,14 @@ Schema-validate before running. Use `$value` as a parameter when supported, keep
 
 ## CloudFront/S3 public exposure cause
 
-Use when the user asks whether a domain or bucket is public because of CloudFront, direct S3 bucket policy, or both. Validate the directed `CloudFrontDistribution` to `S3Bucket` and `S3Bucket` to `S3PolicyStatement` relationships before running.
+Use when the user asks whether a domain or bucket is public because of CloudFront, direct S3 bucket policy, or both. Validate the directed `AWSCloudFrontDistribution` to `AWSS3Bucket` and `AWSS3Bucket` to `AWSS3PolicyStatement` relationships before running.
 
 ```cypher
 CALL {
-  MATCH (b:S3Bucket)
+  MATCH (b:AWSS3Bucket)
   WHERE b.name = $value OR b.id = $value
-  OPTIONAL MATCH (cf:CloudFrontDistribution)-[:SERVES_FROM]->(b)
-  OPTIONAL MATCH (b)-[:POLICY_STATEMENT]->(stmt:S3PolicyStatement)
+  OPTIONAL MATCH (cf:AWSCloudFrontDistribution)-[:SERVES_FROM]->(b)
+  OPTIONAL MATCH (b)-[:POLICY_STATEMENT]->(stmt:AWSS3PolicyStatement)
   RETURN 'bucket_name_or_id' AS match_path,
          b.id AS bucket_id,
          b.name AS bucket_name,
@@ -36,10 +36,10 @@ CALL {
          stmt.condition AS statement_condition
   LIMIT 100
   UNION
-  MATCH (cf:CloudFrontDistribution)-[:SERVES_FROM]->(b:S3Bucket)
+  MATCH (cf:AWSCloudFrontDistribution)-[:SERVES_FROM]->(b:AWSS3Bucket)
   WHERE cf.domain_name = $value
      OR ANY(alias IN coalesce(cf.aliases, []) WHERE alias = $value)
-  OPTIONAL MATCH (b)-[:POLICY_STATEMENT]->(stmt:S3PolicyStatement)
+  OPTIONAL MATCH (b)-[:POLICY_STATEMENT]->(stmt:AWSS3PolicyStatement)
   RETURN 'cloudfront_domain_or_alias' AS match_path,
          b.id AS bucket_id,
          b.name AS bucket_name,
@@ -73,7 +73,7 @@ LIMIT 100
 Use when the target bucket is already known and the answer requires direct policy-statement details.
 
 ```cypher
-MATCH (b:S3Bucket)-[:POLICY_STATEMENT]->(stmt:S3PolicyStatement)
+MATCH (b:AWSS3Bucket)-[:POLICY_STATEMENT]->(stmt:AWSS3PolicyStatement)
 WHERE b.name = $value OR b.id = $value
 RETURN b.id AS bucket_id,
        b.name AS bucket_name,
@@ -96,7 +96,7 @@ LIMIT 100
 Use for EC2 instances, public IPs, and "which security group/rule exposes this" questions. Include IPv6-style all-internet ranges when represented as `AWSIpRange`.
 
 ```cypher
-MATCH (instance:EC2Instance)
+MATCH (instance:AWSEC2Instance)
 WHERE (instance.id = $value
     OR instance.instanceid = $value
     OR instance.name = $value
@@ -105,11 +105,11 @@ WHERE (instance.id = $value
   AND (instance.publicipaddress IS NOT NULL OR instance.publicdnsname IS NOT NULL)
 CALL {
   WITH instance
-  MATCH (instance)-[:MEMBER_OF_EC2_SECURITY_GROUP]->(sg:EC2SecurityGroup)
+  MATCH (instance)-[:MEMBER_OF_EC2_SECURITY_GROUP]->(sg:AWSEC2SecurityGroup)
   RETURN sg
   UNION
   WITH instance
-  MATCH (instance)-[:NETWORK_INTERFACE]->(:NetworkInterface)-[:MEMBER_OF_EC2_SECURITY_GROUP]->(sg:EC2SecurityGroup)
+  MATCH (instance)-[:NETWORK_INTERFACE]->(:NetworkInterface)-[:MEMBER_OF_EC2_SECURITY_GROUP]->(sg:AWSEC2SecurityGroup)
   RETURN sg
 }
 MATCH (cidr:AWSIpRange)-[:MEMBER_OF_IP_RULE]->(rule:AWSIpPermissionInbound)-[:MEMBER_OF_EC2_SECURITY_GROUP]->(sg)
@@ -140,8 +140,8 @@ WHERE lb.id = $value
    OR lb.name = $value
    OR lb.dnsname = $value
    OR lb.arn = $value
-OPTIONAL MATCH (lb)-[:ELBV2_LISTENER]->(listener:ELBV2Listener)
-OPTIONAL MATCH (lb)-[:MEMBER_OF_EC2_SECURITY_GROUP]->(sg:EC2SecurityGroup)<-[:MEMBER_OF_EC2_SECURITY_GROUP]-(rule:AWSIpPermissionInbound)<-[:MEMBER_OF_IP_RULE]-(cidr:AWSIpRange)
+OPTIONAL MATCH (lb)-[:ELBV2_LISTENER]->(listener:AWSELBV2Listener)
+OPTIONAL MATCH (lb)-[:MEMBER_OF_EC2_SECURITY_GROUP]->(sg:AWSEC2SecurityGroup)<-[:MEMBER_OF_EC2_SECURITY_GROUP]-(rule:AWSIpPermissionInbound)<-[:MEMBER_OF_IP_RULE]-(cidr:AWSIpRange)
 WHERE cidr.range IN ['0.0.0.0/0', '::/0']
 OPTIONAL MATCH (lb)-[r_expose:EXPOSE]->(target)
 RETURN lb.id AS load_balancer_id,
@@ -167,7 +167,7 @@ RETURN lb.id AS load_balancer_id,
 LIMIT 100
 ```
 
-For classic ELB, validate the classic labels and run the same shape with `AWSLoadBalancer` / `ELBListener`.
+For classic ELB, validate the classic labels and run the same shape with `AWSLoadBalancer` / `AWSELBListener`.
 
 ## ECS behind a load balancer
 
@@ -177,35 +177,35 @@ Use when a load balancer or ECS container/service/task is the suspected exposure
 CALL {
   MATCH (lb:AWSLoadBalancerV2:LoadBalancer)
   WHERE lb.id = $value OR lb.name = $value OR lb.dnsname = $value
-  MATCH (lb)-[r_expose:EXPOSE]->(private_ip:EC2PrivateIp)<-[:PRIVATE_IP_ADDRESS]-(eni:NetworkInterface)<-[:NETWORK_INTERFACE]-(task:ECSTask)
+  MATCH (lb)-[r_expose:EXPOSE]->(private_ip:AWSEC2PrivateIp)<-[:PRIVATE_IP_ADDRESS]-(eni:NetworkInterface)<-[:NETWORK_INTERFACE]-(task:AWSECSTask)
   RETURN lb, r_expose, private_ip, eni, task, null AS matched_service, null AS matched_container
   UNION
-  MATCH (task:ECSTask)
+  MATCH (task:AWSECSTask)
   WHERE task.id = $value OR task.arn = $value
-  MATCH (lb:AWSLoadBalancerV2:LoadBalancer)-[r_expose:EXPOSE]->(private_ip:EC2PrivateIp)<-[:PRIVATE_IP_ADDRESS]-(eni:NetworkInterface)<-[:NETWORK_INTERFACE]-(task)
+  MATCH (lb:AWSLoadBalancerV2:LoadBalancer)-[r_expose:EXPOSE]->(private_ip:AWSEC2PrivateIp)<-[:PRIVATE_IP_ADDRESS]-(eni:NetworkInterface)<-[:NETWORK_INTERFACE]-(task)
   RETURN lb, r_expose, private_ip, eni, task, null AS matched_service, null AS matched_container
   UNION
-  MATCH (service:ECSService)
+  MATCH (service:AWSECSService)
   WHERE service.id = $value OR service.name = $value
-  MATCH (service)-[:HAS_TASK]->(task:ECSTask)
-  MATCH (lb:AWSLoadBalancerV2:LoadBalancer)-[r_expose:EXPOSE]->(private_ip:EC2PrivateIp)<-[:PRIVATE_IP_ADDRESS]-(eni:NetworkInterface)<-[:NETWORK_INTERFACE]-(task)
+  MATCH (service)-[:HAS_TASK]->(task:AWSECSTask)
+  MATCH (lb:AWSLoadBalancerV2:LoadBalancer)-[r_expose:EXPOSE]->(private_ip:AWSEC2PrivateIp)<-[:PRIVATE_IP_ADDRESS]-(eni:NetworkInterface)<-[:NETWORK_INTERFACE]-(task)
   RETURN lb, r_expose, private_ip, eni, task, service AS matched_service, null AS matched_container
   UNION
-  MATCH (container:ECSContainer)
+  MATCH (container:AWSECSContainer)
   WHERE container.id = $value OR container.arn = $value OR container.name = $value
-  MATCH (task:ECSTask)-[:HAS_CONTAINER]->(container)
-  MATCH (lb:AWSLoadBalancerV2:LoadBalancer)-[r_expose:EXPOSE]->(private_ip:EC2PrivateIp)<-[:PRIVATE_IP_ADDRESS]-(eni:NetworkInterface)<-[:NETWORK_INTERFACE]-(task)
+  MATCH (task:AWSECSTask)-[:HAS_CONTAINER]->(container)
+  MATCH (lb:AWSLoadBalancerV2:LoadBalancer)-[r_expose:EXPOSE]->(private_ip:AWSEC2PrivateIp)<-[:PRIVATE_IP_ADDRESS]-(eni:NetworkInterface)<-[:NETWORK_INTERFACE]-(task)
   RETURN lb, r_expose, private_ip, eni, task, null AS matched_service, container AS matched_container
   UNION
-  MATCH (container:ECSContainer)
+  MATCH (container:AWSECSContainer)
   WHERE container.id = $value OR container.arn = $value OR container.name = $value
-  MATCH (container)-[:WORKLOAD_PARENT]->(task:ECSTask)
-  MATCH (lb:AWSLoadBalancerV2:LoadBalancer)-[r_expose:EXPOSE]->(private_ip:EC2PrivateIp)<-[:PRIVATE_IP_ADDRESS]-(eni:NetworkInterface)<-[:NETWORK_INTERFACE]-(task)
+  MATCH (container)-[:WORKLOAD_PARENT]->(task:AWSECSTask)
+  MATCH (lb:AWSLoadBalancerV2:LoadBalancer)-[r_expose:EXPOSE]->(private_ip:AWSEC2PrivateIp)<-[:PRIVATE_IP_ADDRESS]-(eni:NetworkInterface)<-[:NETWORK_INTERFACE]-(task)
   RETURN lb, r_expose, private_ip, eni, task, null AS matched_service, container AS matched_container
 }
-OPTIONAL MATCH (task)-[:HAS_CONTAINER]->(container_from_task:ECSContainer)
+OPTIONAL MATCH (task)-[:HAS_CONTAINER]->(container_from_task:AWSECSContainer)
 WHERE matched_container IS NULL
-OPTIONAL MATCH (container_from_parent:ECSContainer)-[:WORKLOAD_PARENT]->(task)
+OPTIONAL MATCH (container_from_parent:AWSECSContainer)-[:WORKLOAD_PARENT]->(task)
 WHERE matched_container IS NULL
 WITH lb, r_expose, private_ip, eni, task, matched_service, matched_container,
      collect(DISTINCT container_from_task) + collect(DISTINCT container_from_parent) AS discovered_containers
@@ -215,7 +215,7 @@ UNWIND CASE
          ELSE [null]
        END AS container
 WITH DISTINCT lb, r_expose, private_ip, eni, task, matched_service, container
-OPTIONAL MATCH (task)-[:WORKLOAD_PARENT]->(service_from_task:ECSService)
+OPTIONAL MATCH (task)-[:WORKLOAD_PARENT]->(service_from_task:AWSECSService)
 WITH lb, r_expose, private_ip, eni, task, container,
      coalesce(matched_service, service_from_task) AS service
 RETURN lb.id AS load_balancer_id,
@@ -240,7 +240,7 @@ LIMIT 100
 Use for EKS public endpoint questions. This proves control-plane exposure, not workload exposure.
 
 ```cypher
-MATCH (cluster:EKSCluster)
+MATCH (cluster:AWSEKSCluster)
 WHERE cluster.id = $value
    OR cluster.name = $value
    OR cluster.arn = $value
@@ -266,15 +266,15 @@ LIMIT 100
 Use for API Gateway or Lambda exposure. REST API modeling is usually richer than API Gateway v2 modeling; report that gap if route/integration evidence is absent.
 
 ```cypher
-MATCH (api:APIGatewayRestAPI)
+MATCH (api:AWSAPIGatewayRestAPI)
 WHERE api.id = $value
    OR api.name = $value
    OR api.arn = $value
    OR api.execution_arn = $value
-OPTIONAL MATCH (api)-[:ASSOCIATED_WITH]->(stage:APIGatewayStage)
-OPTIONAL MATCH (api)-[:RESOURCE]->(resource:APIGatewayResource)
-OPTIONAL MATCH (resource)-[:HAS_METHOD]->(method:APIGatewayMethod)
-OPTIONAL MATCH (resource)-[:HAS_INTEGRATION]->(integration:APIGatewayIntegration)
+OPTIONAL MATCH (api)-[:ASSOCIATED_WITH]->(stage:AWSAPIGatewayStage)
+OPTIONAL MATCH (api)-[:RESOURCE]->(resource:AWSAPIGatewayResource)
+OPTIONAL MATCH (resource)-[:HAS_METHOD]->(method:AWSAPIGatewayMethod)
+OPTIONAL MATCH (resource)-[:HAS_INTEGRATION]->(integration:AWSAPIGatewayIntegration)
 RETURN api.id AS api_id,
        api.name AS api_name,
        api.endpoint_type AS endpoint_type,

@@ -42,7 +42,7 @@ Ask the user inline for anything missing before drafting Cypher:
 Two rules cannot be broken. The server rejects rule submissions that violate them.
 
 1. **Every `RETURN` expression in `cypher_query` must alias to a name listed in `output_fields`, using explicit `AS`.** Example: `RETURN db.id AS id, db.name AS name, db.region AS region`. `RETURN *` and unaliased returns are rejected. `output_fields` must include one entry per alias, with `type` in `{"string", "number", "boolean"}`.
-2. **`cypher_visual_query` returns whole nodes and relationships, not scalar properties.** Example: `MATCH (db:RDSInstance) WHERE db.publicly_accessible = true RETURN db LIMIT 100`. This query powers graph visualization in the UI.
+2. **`cypher_visual_query` returns whole nodes and relationships, not scalar properties.** Example: `MATCH (db:AWSRDSInstance) WHERE db.publicly_accessible = true RETURN db LIMIT 100`. This query powers graph visualization in the UI.
 
 Both queries must contain a `LIMIT` clause and use `MATCH` / `RETURN` only. Write operations (`CREATE`, `MERGE`, `DELETE`, `SET`, `REMOVE`) are rejected.
 
@@ -105,8 +105,8 @@ Call `subimageCreateCustomRule` exactly once with a `CustomRuleRequest` payload.
       "name": "AWS RDS without encryption",
       "description": "RDS instances where storage_encrypted is false.",
       "module": "AWS",
-      "cypher_query": "MATCH (db:RDSInstance) WHERE db.storage_encrypted = false RETURN db.id AS id, db.db_instance_identifier AS name, db.region AS region LIMIT 10000",
-      "cypher_visual_query": "MATCH (db:RDSInstance) WHERE db.storage_encrypted = false RETURN db LIMIT 100"
+      "cypher_query": "MATCH (db:AWSRDSInstance) WHERE db.storage_encrypted = false RETURN db.id AS id, db.db_instance_identifier AS name, db.region AS region LIMIT 10000",
+      "cypher_visual_query": "MATCH (db:AWSRDSInstance) WHERE db.storage_encrypted = false RETURN db LIMIT 100"
     }
   ],
   "output_fields": [
