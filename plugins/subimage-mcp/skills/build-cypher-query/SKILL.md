@@ -97,7 +97,7 @@ The query passed to `subimageRunCypher` must:
 - give every node variable at least one label (no bare `MATCH (n)`); unlabeled scans touch the entire graph and time out,
 - give every relationship pattern a variable and an explicit type (e.g. `(a)-[r1:RELATES_TO]->(b)`; never `(a)-[:RELATES_TO]->(b)` or `(a)-[]->(b)`),
 - use the schema-declared direction for every relationship. If a cached model query or draft uses the opposite arrow, correct it before execution and note the correction in prose if useful.
-- include `LIMIT`, default `LIMIT 100` unless the user asks otherwise,
+- include `LIMIT`, default `LIMIT 100` unless the user asks otherwise. A query that returns only aggregate rows, such as a cardinality `COUNT(*)` probe, is the exception because `LIMIT` would not bound the underlying scan,
 - use `OPTIONAL MATCH` only when missing relationships should still preserve rows,
 - never use unbounded variable-length paths.
 
