@@ -216,6 +216,16 @@ LIMIT 20
 
 ## Vulnerabilities, CVEs and packages
 
+Three different objects share a CVE id. They are not the same node.
+
+| Object | Layer | What it is | What it is not |
+|---|---|---|---|
+| `:VulnerabilitySignal:Signal` | overlay | One SubImage product row per `(cve_id, service_image)` | The CVE itself. A scan result. Dependabot. |
+| `:CVEMetadata` | overlay | The shared NVD/EPSS/KEV record (`id` = CVE id) | Who found it. Where it runs. A finding. |
+| `:CVE` | map extra label | Extra label on an actual scan result: `TrivyImageFinding:CVE` or `GitHubDependabotAlert:CVE` | A standalone product node. Do not `MATCH (c:CVE)`. |
+
+`INSTANCE_OF` joins Signal → CVEMetadata (overlay). `ENRICHES` joins CVEMetadata → a scanner `:CVE` (crosses into the map — that hop is a new statement). Dependabot never becomes a Signal; a Dependabot-only advisory exists only as `GitHubDependabotAlert:CVE`.
+
 Two phases. Never one `MATCH`.
 
 **Phase 1 — overlay only** (this skill):

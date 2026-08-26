@@ -32,11 +32,17 @@ This skill reads the sealed product index and the Cartography map through two `s
 
 ### 1. Product step: overlay record only
 
-A CVE is present as one `:VulnerabilitySignal:Signal` per affected service
-image, all pointing at the same `:CVEMetadata`. This statement binds only
-overlay labels. Stop after it. Dependabot never becomes a Signal; a
-Dependabot-only CVE will miss here and must be read from
-`GitHubDependabotAlert` in the map step.
+Three objects share this CVE id and they are not interchangeable:
+
+- `VulnerabilitySignal:Signal` — SubImage product row for one
+  `(cve_id, service_image)`. Not the CVE. Not a scan.
+- `CVEMetadata` — NVD/KEV/EPSS hub. Not a finding. Not who discovered it.
+- `:CVE` — extra label on the scan result (`TrivyImageFinding:CVE` or
+  `GitHubDependabotAlert:CVE`). Map only. Never `MATCH (c:CVE)`.
+
+This step reads only the first two. Stop after it. Dependabot never becomes
+a Signal; a Dependabot-only advisory will miss here and must be read from
+`GitHubDependabotAlert:CVE` in the map step.
 
 ```cypher
 MATCH (v:VulnerabilitySignal:Signal)-[:INSTANCE_OF]->(m:CVEMetadata)
