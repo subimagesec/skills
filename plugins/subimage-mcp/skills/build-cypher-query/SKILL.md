@@ -81,6 +81,14 @@ Do not run the final query if a dedicated non-Cypher tool has already returned a
 1. Run the final query with `subimageRunCypher(query=<final>)`. It streams to the UI as an interactive table; summarize the rows for the user, do not reprint the table.
 2. If you authored the query from scratch (no `searchModelQueries` hit) and execution returned meaningful rows, call `saveModelQuery` with a clear description and the labels involved so future questions of the same shape can skip the authoring step. Do not cache a query that only passed syntax: cache after the result is confirmed useful.
 
+## Overlay labels are not schema
+
+These labels are a SubImage sealed product index, not Cartography schema and not topology. If a live-graph probe or `apoc.meta` returns them, drop them. Do not look them up in `subimageGetNodesSchema` (they are absent). Do not walk them as infrastructure.
+
+Overlay labels: `Finding`, `VulnerabilitySignal`, `CVEMetadata`, `AttackPath`, `AttackPathStep`, `Issue`, `Rule`, `Framework`, `Signal`.
+
+Product-index reads belong in `signals-via-cypher` as a separate step. A query this skill authors must not bind those labels.
+
 ## Schema rules
 
 - Never invent node labels, property names, or relationship types. Use only what `subimageListModuleSchemaNodes` or `subimageGetNodesSchema` returned.
@@ -129,6 +137,7 @@ Simplify before running:
 - Pre-loading the full schema "just in case" via `subimageListModuleSchemaNodes` on every module. Only enumerate modules when the labels are genuinely unknown.
 - Running a separate cardinality query for every request. Use the one optional probe only when label size materially affects the query plan and the final query cannot filter early.
 - Building virtual nodes or relationships (`apoc.create.vNode` / `apoc.create.vRelationship`) to "visualize" a derived relationship.
+- Binding overlay labels (`VulnerabilitySignal`, `Finding`, `CVEMetadata`, `AttackPath`, `Issue`) in a query this skill authors. Those are not schema. Read them in a prior `signals-via-cypher` step, copy scalar keys, then query the map.
 
 ## Special cases
 
