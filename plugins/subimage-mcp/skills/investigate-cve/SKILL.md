@@ -20,7 +20,7 @@ Given a CVE id, pulls SubImage's full picture for it: severity, KEV status, affe
 
 ## Prerequisites
 
-This skill reads the vulnerability graph through `subimageRunCypher` (optionally with `subimageAgentBuildQuery` to draft a query). The optional internet-enrichment step uses `WebSearch` (and `WebFetch` for a specific advisory URL). The pivot at the end reads attack paths from the same graph.
+This skill reads the sealed product index and the Cartography map through two `subimageRunCypher` calls. Overlay first (Signal / CVEMetadata), then a new map query (Trivy, Dependabot, Image, Container). There is no `subimageAgentBuildQuery`. The optional internet-enrichment step uses `WebSearch` (and `WebFetch` for a specific advisory URL). The pivot at the end reads attack paths from the product index.
 
 ## Required inputs
 
@@ -30,17 +30,17 @@ This skill reads the vulnerability graph through `subimageRunCypher` (optionally
 
 ## Workflow
 
-### 1. Pull the full CVE record
+### 1. Product step: overlay record only
 
 A CVE is present as one `:VulnerabilitySignal:Signal` per affected service
-image, all pointing at the same `:CVEMetadata`:
+image, all pointing at the same `:CVEMetadata`. This statement binds only
+overlay labels. Stop after it. Dependabot never becomes a Signal; a
+Dependabot-only CVE will miss here and must be read from
+`GitHubDependabotAlert` in the map step.
 
 ```cypher
 MATCH (v:VulnerabilitySignal:Signal)-[:INSTANCE_OF]->(m:CVEMetadata)
 WHERE v.cve_id = toUpper('<CVE_ID>') AND v.status IN ['active', 'accepted']
-OPTIONAL MATCH (m)-[:ENRICHES]->(f:TrivyImageFinding:CVE)-[:AFFECTS]->(p:PackageVersion)
-WHERE EXISTS { (v)-[:AFFECTS]->(:Image)<-[:DEPLOYED]-(p) }
-OPTIONAL MATCH (p)-[:SHOULD_UPDATE_TO]->(fix:TrivyFix)-[:APPLIES_TO]->(f)
 RETURN DISTINCT m.id AS cve, m.title AS title, m.description AS description,
        CASE
          WHEN m.base_severity IS NOT NULL THEN toUpper(m.base_severity)
@@ -53,87 +53,80 @@ RETURN DISTINCT m.id AS cve, m.title AS title, m.description AS description,
        m.base_score AS cvss_score, m.published_date AS published_date,
        coalesce(m.is_kev, false) AS cisa_known_exploit, m.cisa_exploit_add AS kev_date,
        m.epss_score AS epss_score, m.epss_percentile AS epss_percentile,
-       v.service_image AS service_image, v.status AS status,
-       p.name AS package, p.version AS installed, fix.version AS fixed_in
-ORDER BY service_image, package
+       v.service_image AS service_image, v.status AS status
+ORDER BY service_image
 LIMIT 100
 ```
 
-Four things this query encodes that a shorter one gets wrong:
+The severity `CASE` is the fallback the product applies. `base_severity` is
+null on some CVEs, and reading it raw silently drops them.
+`status IN ['active','accepted']` is the current set the product reads. An
+accepted CVE is one a human signed off on, not an absent one.
+`toUpper()` matters because CVE ids are uppercase in the graph.
 
-- The severity `CASE` is the fallback the product applies. `base_severity` is
-  null on some CVEs, and reading it raw silently drops them.
-- The `EXISTS` clause pins each package to an image the Signal actually affects.
-  `ENRICHES` alone reaches every occurrence of that CVE across the fleet.
-- The fix version is `TrivyFix.version`, reached through the package. There is no
-  `fixed_version` property on `PackageVersion`; reading one returns null on every
-  row, which reads as "nothing is fixable" instead of as an error. The
-  `APPLIES_TO` hop back onto `f` is what scopes the fix to *this* CVE: a package
-  carries one `SHOULD_UPDATE_TO` edge per fix across all of its CVEs.
-- `status IN ['active','accepted']` is the current set the product reads. An
-  accepted CVE is one a human signed off on, not an absent one.
-
-`toUpper()` matters because CVE ids are uppercase in the graph and users type
-them either way.
-
-If the query returns no rows, the CVE is not present in this tenant's data. Stop and tell the user: "SubImage has no record of `<CVE_ID>` in your environment. Either it does not affect any synced asset, or vulnerability scanning is not enabled for the relevant module. Run `subimage-mcp:improve-subimage-coverage` to check coverage."
+If the query returns no rows, the CVE is not in the product index. Do not say
+it is absent from the environment until the map step also finds no
+`TrivyImageFinding` and no `GitHubDependabotAlert` for that id. A
+Dependabot-only advisory is a real observation that never becomes a Signal.
 
 If every row comes back `status = 'accepted'`, the CVE **is** present and someone
-accepted the risk. Do not use the "no record" wording. Lead with that instead:
-the CVE is known, the risk was accepted, and here is where it still sits. Offer
-to pull the acceptance rationale as a follow-up. When rows are mixed, report the
-active ones as the open work and mention the accepted ones separately rather than
-folding them into one count.
+accepted the risk. Do not use the "no record" wording.
 
-Then find where it actually runs. The Signal affects an image; the workloads
-running that image are one hop further:
+### 1b. Map step: packages, scanners, and runtime
+
+New statement. No `VulnerabilitySignal`, `CVEMetadata`, `Finding`, or
+`AttackPath`. Copy `cve_id` from step 1.
+
+Packages and Trivy fixes:
 
 ```cypher
-MATCH (v:VulnerabilitySignal:Signal)-[:AFFECTS]->(i:Image)<-[:RESOLVED_IMAGE]-(rt)
-WHERE v.cve_id = toUpper('<CVE_ID>') AND v.status IN ['active', 'accepted']
-  AND (rt:Container OR rt:Function)
-  AND (NOT rt:Container OR rt._ont_state = 'running')
-RETURN DISTINCT rt.id AS runtime_id, coalesce(rt._ont_name, rt.name) AS runtime_name,
-       labels(rt) AS labels, i.id AS image
-ORDER BY runtime_id
+MATCH (f:TrivyImageFinding:CVE)-[:AFFECTS]->(p:PackageVersion)
+WHERE f.cve_id = toUpper('<CVE_ID>')
+OPTIONAL MATCH (p)-[:SHOULD_UPDATE_TO]->(fix:TrivyFix)-[:APPLIES_TO]->(f)
+RETURN DISTINCT f.cve_id AS cve, p.name AS package,
+       p.version AS installed, fix.version AS fixed_in
+ORDER BY package
+LIMIT 100
+```
+
+The `APPLIES_TO` hop back onto `f` scopes the fix to *this* CVE. There is no
+`fixed_version` on `PackageVersion`.
+
+Scanner identity (Dependabot and Trivy) and runtime:
+
+```cypher
+OPTIONAL MATCH (dependabot:GitHubDependabotAlert {cve_id: toUpper('<CVE_ID>')})-[:FOUND_IN]->(repo)
+OPTIONAL MATCH (trivy:TrivyImageFinding {cve_id: toUpper('<CVE_ID>')})-[:AFFECTS]->(i:Image)
+OPTIONAL MATCH (i)<-[:RESOLVED_IMAGE]-(rt)
+WHERE rt:Container OR rt:Function
+RETURN DISTINCT dependabot.id AS dependabot_id, repo.fullname AS repo,
+       trivy.id AS trivy_id, i.id AS image,
+       rt.id AS runtime_id, coalesce(rt._ont_name, rt.name) AS runtime_name
 LIMIT 100
 ```
 
 A vulnerable image nobody runs is a different conversation from a vulnerable
-image on a production container, so keep the two counts distinct in the summary.
-`subimageRunCypher` takes no query parameters, so every value above is inlined
-as a literal: escape backslashes and single quotes before substituting. ARNs
-and fully-qualified GCP/Azure ids can carry either.
+image on a production container. `subimageRunCypher` takes no query
+parameters: escape backslashes and single quotes before substituting.
 
 
-### 2. Read fixability from the record
+### 2. Read fixability from the map step
 
-Fix data is already in step 1: each row carries `installed` and `fixed_in`, the
-latter from `TrivyFix.version`. A null `fixed_in` means no fix is published; say
-so rather than dropping the row. Derive, per package: target fix version, the
-affected workloads from the runtime query above, and whether the fix is a package
-bump or an image rebuild.
+Fix data is already in step 1b: each row carries `installed` and `fixed_in`,
+the latter from `TrivyFix.version`. A null `fixed_in` means no fix is
+published; say so rather than dropping the row.
 
-Query further **only** when you need per-package detail step 1 does not carry,
-such as every other CVE on the same package:
+Query further **only** when you need every other CVE on the same package
+(map only):
 
 ```cypher
 MATCH (p:PackageVersion {name: '<package-name>'})-[:DEPLOYED]->(i:Image)
-MATCH (v:VulnerabilitySignal:Signal)-[:AFFECTS]->(i)
-MATCH (v)-[:INSTANCE_OF]->(m:CVEMetadata)
-      -[:ENRICHES]->(f:TrivyImageFinding:CVE)-[:AFFECTS]->(p)
-WHERE v.status IN ['active', 'accepted']
+MATCH (f:TrivyImageFinding:CVE)-[:AFFECTS]->(p)
 OPTIONAL MATCH (p)-[:SHOULD_UPDATE_TO]->(fix:TrivyFix)-[:APPLIES_TO]->(f)
-RETURN DISTINCT m.id AS cve, m.base_severity AS severity, m.base_score AS cvss_score,
-       p.version AS installed, fix.version AS fixed_in, v.status AS status
-ORDER BY cvss_score DESC
+RETURN DISTINCT f.cve_id AS cve, p.version AS installed, fix.version AS fixed_in
+ORDER BY cve
 LIMIT 100
 ```
-
-The third `MATCH` is what makes this "CVEs in this package". Without the
-`ENRICHES`/`AFFECTS` join back onto `p`, the query returns every CVE on every
-image that happens to also carry the package, which on a busy image is thousands
-of unrelated rows.
 
 If nothing is fixable, note that explicitly in the summary; the next action shifts from "patch" to "monitor / mitigate / accept".
 
@@ -150,20 +143,17 @@ When triggered, run at most ~1-3 focused searches (e.g. the NVD/vendor advisory,
 
 When not triggered, skip it and instead offer it as a one-line follow-up ("Want me to check public exploit / PoC availability for this CVE?"). Never let web text override SubImage's environment-specific data: the graph is authoritative for *what you run*; the web is context for *how bad it is*.
 
-### 4. Optional graph follow-up
+### 4. Optional map follow-up
 
-Use Cypher only when:
+Use a new Cartography-only `subimageRunCypher` (or `build-cypher-query`) when:
 
-- Steps 1 and 2 point at a resource type whose surroundings you still need to map.
+- Steps 1 and 1b point at a resource type whose surroundings you still need to map.
 - The user explicitly asks how the CVE could propagate (e.g. "if `lodash` is here, where else is it transitively?").
 
-```
-subimageAgentBuildQuery(user_question="<rephrased intent>")
-# then:
-subimageRunCypher(query="<query returned above>")
-```
+Do not call `subimageAgentBuildQuery` (it does not exist). Do not put overlay
+labels in this statement.
 
-Skip this step otherwise. Steps 1 and 2 already answer the common questions.
+Skip this step otherwise. Steps 1 and 1b already answer the common questions.
 
 ### 5. Summarize
 
@@ -240,6 +230,8 @@ This converts a static CVE finding into a live exploitability question, which is
 - Listing every affected resource. Top 5 + a count is enough.
 - Web-searching every CVE reflexively. The internet step is for KEV/critical/no-fix/exploitability questions; otherwise offer it, don't run it.
 - Letting public web text override SubImage data about what you actually run. The graph is authoritative for your environment.
+- Mixing overlay labels and map topology in one statement. Two calls: product index, then map.
+- Treating Dependabot as a Signal property. Scanner identity is on `GitHubDependabotAlert` / `TrivyImageFinding`.
 
 ## References
 

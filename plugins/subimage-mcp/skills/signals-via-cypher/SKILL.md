@@ -1,27 +1,34 @@
 ---
 name: signals-via-cypher
-description: Answer questions about findings, compliance posture, vulnerabilities, CVEs, packages, and attack paths by querying the Signal nodes that hold them in Neo4j. Use when the user asks what is failing a rule, how a framework scores, which CVEs or packages are present, what is exploitable or KEV-listed, or how an attacker could reach an asset.
+description: Read SubImage's sealed product index (findings, vulnerabilities, packages, attack paths) with overlay-only Cypher. Use for what SubImage currently shows. Do not use for Cartography topology, scanner identity, or path-to-production — those are a separate map query.
 ---
 
 # Security Signals via Cypher
 
 ## What this does
 
-SubImage derives its security observations from the graph and stores the active
-ones back in it as `Signal` nodes. A finding, a vulnerability, and an attack path
-are all `:Signal` with one domain label, so "which buckets fail the public-access
-rule", "which CVEs are KEV-listed", and "how does an attacker reach the admin
-role" are each one Cypher query on a shape this skill gives you.
+SubImage stores product-view rows in Neo4j as a **sealed product index**:
+`Finding:Signal`, `VulnerabilitySignal:Signal`, `AttackPath:Signal`, plus
+`CVEMetadata`, `AttackPathStep`, `Issue`, `Rule`, and `Framework`. These are
+not Cartography schema and not infrastructure topology. Cypher here is a
+table read. If you need images, containers, repos, or scanner observations,
+stop, copy a scalar key, and run a **new** map query with no overlay labels.
 
 ## Hard entry gate
 
-Load this skill for the current state of findings, compliance rule results,
-vulnerabilities, CVEs, packages, or attack paths.
+Load this skill for the current product-index state of findings, compliance
+rule results, vulnerabilities, CVEs, packages, or attack paths.
 
 Do NOT load it for:
 
+- **map topology**: scanner identity (Dependabot vs Trivy), dual-scanner
+  questions, path to production, runtime exposure, image/repo/workload
+  walks. Those are a second `subimageRunCypher` on Cartography labels only
+  (`GitHubDependabotAlert`, `TrivyImageFinding`, `Image`, `Container`, ...).
+  Use a map-only template below or `build-cypher-query`. Never combine that
+  walk into the overlay query.
 - **history**: "when did this change", "how many last month", "is our score
-  improving". The graph holds only currently active Signals. Use
+  improving". The index holds only currently active rows. Use
   `subimageGetRuleHistory` and `subimageGetFrameworkHistory`.
 - **what is configured**: which rules or frameworks exist, are enabled, or are
   tenant-authored. Those join operator state Cypher cannot read. Use
@@ -33,9 +40,10 @@ Do NOT load it for:
 - **what-if scenario modeling**: `subimageGetScenarioCapabilities`, then
   `subimageCreateAttackPathScenario`.
 
-**The shapes below are authoritative.** Do not call `subimageListModules`,
+**Overlay templates are authoritative.** Do not call `subimageListModules`,
 `subimageListModuleSchemaNodes`, `subimageGetNodesSchema`, or
-`subimageSearchModelQueries` before querying them; go straight to
+`subimageSearchModelQueries` for overlay labels; they are absent from that
+schema. A miss is not a license to invent an edge. Go straight to
 `subimageRunCypher`.
 
 ## Required inputs
@@ -64,7 +72,7 @@ shared properties:
 | `signal_type` | `finding`, `vulnerability`, or `attack-path` |
 | `status` | `active` or `accepted`; accepted means a human accepted the risk |
 | `first_seen` | start of the current active occurrence |
-| `sources` | list of Cartography module names of the participating resources |
+| `sources` | Cartography `_module_name` of participating **resources** (`scan`, `github`, `aws`). Not a scanner name. There is no `source` scalar. Never `sources CONTAINS "Trivy"` or `"Dependabot"`. |
 
 **Always filter `status`, and default to `status IN ['active','accepted']`.** That
 is the full current set, and it is what the product's own reads use. `active`
@@ -208,17 +216,33 @@ LIMIT 20
 
 ## Vulnerabilities, CVEs and packages
 
+Two phases. Never one `MATCH`.
+
+**Phase 1 — overlay only** (this skill):
+
 ```text
 (:VulnerabilitySignal:Signal)-[:INSTANCE_OF]->(:CVEMetadata)
-(:VulnerabilitySignal:Signal)-[:AFFECTS]->(:Image)<-[:RESOLVED_IMAGE]-(:Container|:Function)
-(:CVEMetadata)-[:ENRICHES]->(:TrivyImageFinding:CVE)-[:AFFECTS]->(:PackageVersion)
+(:VulnerabilitySignal:Signal)-[:AFFECTS]->(:Image)   // pointer: collect image id, then STOP
+```
+
+**Phase 2 — map only** (new `subimageRunCypher`, no overlay labels):
+
+```text
+(:GitHubDependabotAlert:CVE)-[:FOUND_IN]->(:GitHubRepository)
+(:TrivyImageFinding:CVE)-[:AFFECTS]->(:Image)
+(:TrivyImageFinding:CVE)-[:AFFECTS]->(:PackageVersion)
 (:PackageVersion)-[:DEPLOYED]->(:Image)
 (:PackageVersion)-[:SHOULD_UPDATE_TO]->(:TrivyFix)-[:APPLIES_TO]->(:TrivyImageFinding)
+(:Container|:Function)-[:RESOLVED_IMAGE]->(:Image)
+(:Image)-[:PACKAGED_FROM]->(:GitHubRepository)
 ```
 
 A Signal is one `(cve_id, service_image)` pair, **not** one CVE: the same CVE on
 two services is two Signals. Count `DISTINCT v.cve_id` when the user asks "how
 many CVEs" and count Signals when they ask "how many vulnerabilities".
+`VulnerabilitySignal` is projected from Trivy image findings only. Dependabot
+never becomes a Signal. Dual-scanner questions are unanswerable from the
+overlay: use the map-only templates.
 
 | Node | Fields |
 |---|---|
@@ -263,47 +287,52 @@ ORDER BY cvss_score DESC
 LIMIT 100
 ```
 
-Where a CVE actually runs:
+Where a CVE actually runs (phase 2, map only — copy `cve_id` from phase 1 first):
 
 ```cypher
-MATCH (v:VulnerabilitySignal:Signal)-[:AFFECTS]->(i:Image)<-[:RESOLVED_IMAGE]-(rt)
-WHERE v.cve_id = toUpper('cve-2026-11111')
-  AND v.status IN ['active', 'accepted']
+MATCH (finding:TrivyImageFinding:CVE)-[:AFFECTS]->(i:Image)<-[:RESOLVED_IMAGE]-(rt)
+WHERE finding.cve_id = toUpper('cve-2026-11111')
   AND (rt:Container OR rt:Function)
   AND (NOT rt:Container OR rt._ont_state = 'running')
 RETURN DISTINCT rt.id AS runtime_id, coalesce(rt._ont_name, rt.name) AS name,
-       labels(rt) AS labels, i.id AS image, v.status AS status
+       labels(rt) AS labels, i.id AS image
 LIMIT 100
 ```
 
-Fixability, per package:
+Fixability, per package (phase 2, map only):
 
 ```cypher
-MATCH (v:VulnerabilitySignal:Signal)-[:INSTANCE_OF]->(m:CVEMetadata)
-      -[:ENRICHES]->(f:TrivyImageFinding:CVE)-[:AFFECTS]->(p:PackageVersion)
-WHERE v.status IN ['active', 'accepted']
-  AND EXISTS { (v)-[:AFFECTS]->(:Image)<-[:DEPLOYED]-(p) }
+MATCH (f:TrivyImageFinding:CVE)-[:AFFECTS]->(p:PackageVersion)-[:DEPLOYED]->(i:Image)
+WHERE EXISTS { (f)-[:AFFECTS]->(i) }
 OPTIONAL MATCH (p)-[:SHOULD_UPDATE_TO]->(fix:TrivyFix)-[:APPLIES_TO]->(f)
-RETURN DISTINCT v.cve_id AS cve, v.status AS status, p.name AS package,
+RETURN DISTINCT f.cve_id AS cve, p.name AS package,
        p.version AS installed, fix.version AS fixed_in
 ORDER BY package
 LIMIT 100
 ```
 
-Two joins here are load-bearing, not refinements.
-
-The `EXISTS` clause: `ENRICHES` reaches every package occurrence of that CVE
-anywhere in the fleet, so without it each Signal is reported against packages
-from images it does not affect. Pin the package to an image the Signal actually
-affects, through `DEPLOYED`.
-
-The `APPLIES_TO` hop back onto `f`: a `PackageVersion` carries one
-`SHOULD_UPDATE_TO` edge per fix across **all** of its CVEs. Walk to `TrivyFix`
-without closing the triangle back onto this CVE's finding and you report some
-other CVE's fix version as this one's. Note the direction: `APPLIES_TO` points at
-the finding, not at the package.
+The `APPLIES_TO` hop back onto `f` is load-bearing: a `PackageVersion` carries
+one `SHOULD_UPDATE_TO` edge per fix across **all** of its CVEs. Walk to
+`TrivyFix` without closing the triangle back onto this CVE's finding and you
+report some other CVE's fix version as this one's. Note the direction:
+`APPLIES_TO` points at the finding, not at the package.
 
 A null `fixed_in` means no fix is published; say so rather than omitting the row.
+
+CVE found by both Dependabot and Trivy, path to production (phase 2, map only;
+do not put `VulnerabilitySignal` or `CVEMetadata` in this statement):
+
+```cypher
+MATCH (dependabot:GitHubDependabotAlert)-[:FOUND_IN]->(repo:GitHubRepository)
+MATCH (trivy:TrivyImageFinding)-[:AFFECTS]->(image:Image)
+WHERE dependabot.cve_id = trivy.cve_id
+MATCH (image)-[:PACKAGED_FROM]->(repo)
+OPTIONAL MATCH (container:Container)-[:RESOLVED_IMAGE]->(image)
+OPTIONAL MATCH (container)-[:WORKLOAD_PARENT]->(pod:KubernetesPod)
+RETURN dependabot.cve_id AS cve, repo.fullname AS repo,
+       image.id AS image, container.id AS container
+LIMIT 100
+```
 
 ## Attack paths
 
@@ -412,12 +441,24 @@ not for display.
 - A CVE id is uppercase in the graph; use `toUpper()` on a user-supplied one
   rather than matching it verbatim.
 - Do not join a Signal to a resource through anything but `AFFECTS`, `FROM`,
-  `TO`, `PRODUCED`, or the `GRANTS`/`REASON`/`ON` chain for attack paths. There
-  is no `tenant_id` property on a Signal; scope by traversing from the affected
-  resource to its `:Tenant`.
+  `TO`, `PRODUCED`, or the `GRANTS`/`REASON`/`ON` chain for attack paths. Those
+  pointers collect an id; do not continue onto `RESOLVED_IMAGE`, `FOUND_IN`,
+  `PACKAGED_FROM`, `WORKLOAD_PARENT`, or `ENRICHES` in the same statement.
+  There is no `tenant_id` property on a Signal.
 
 ## Anti-patterns
 
+- Mixing overlay labels (`VulnerabilitySignal`, `Finding`, `CVEMetadata`,
+  `AttackPath`, `Issue`, `Rule`, `Framework`) with map topology
+  (`RESOLVED_IMAGE`, `FOUND_IN`, `PACKAGED_FROM`, `WORKLOAD_PARENT`,
+  `ENRICHES`, `TrivyImageFinding`, `GitHubDependabotAlert`) in one `MATCH`.
+- Looking overlay labels up in `subimageGetNodesSchema` / `subimageListModules`.
+  They are not Cartography schema.
+- `VulnerabilitySignal.sources CONTAINS "Trivy"` or `"Dependabot"`. `sources`
+  is resource-module provenance (`scan`, `github`, `aws`), not a scanner name.
+- Treating `VulnerabilitySignal` as a CVE that `AFFECTS` a Container. The
+  Signal points at an Image; containers are a map step via `RESOLVED_IMAGE`.
+- Treating Finding / AttackPath / Issue as a Cartography map node.
 - Counting Findings when the user asked how many assets fail: one asset can carry
   several Findings from one rule. Read `Rule.failing_assets`.
 - Counting Vulnerability Signals when the user asked how many CVEs: the Signal is
@@ -456,15 +497,16 @@ query rather than implying the page is the whole set.
 - Any Finding-to-asset traversal is an `OPTIONAL MATCH` applied after the
   Findings were selected and limited, and the answer treats a null asset as an
   edgeless Finding rather than dropping the row.
-- One `subimageRunCypher` call answered it; two means the first was wrong or a
-  count follow-up was genuinely needed.
-- A severity or KEV claim came from `CVEMetadata`, and a fix version from
-  `TrivyFix` reached through this CVE's own finding, not from the Signal alone.
+- Overlay queries bind only overlay labels. Map queries bind only Cartography
+  labels. Two phases when both are needed; never one mixed statement.
+- A severity or KEV claim came from `CVEMetadata` (phase 1). A fix version or
+  runtime/scanner hop came from a separate map query (phase 2).
 
 ## References
 
-- `subimage-mcp:build-cypher-query` for relational questions that leave the
-  Signal layer: ownership, reachability between arbitrary resource types.
+- `subimage-mcp:build-cypher-query` for the Cartography map step: ownership,
+  reachability, scanner identity, path to production. Overlay labels do not
+  belong in that skill's queries.
 - `subimage-mcp:inventory-via-cypher` for flat listings of one resource type.
 - `subimage-mcp:investigate-cve`, `investigate-container`,
   `investigate-public-exposure`, `review-attack-path` for the per-domain
