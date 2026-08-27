@@ -28,7 +28,7 @@ Optional what-if simulation overlays any of the above.
 
 ## Prerequisites
 
-Paths, their steps, and the n+1 probes all read the graph through `subimageRunCypher` (with `subimageAgentBuildQuery` to draft the harder queries), backed by `subimageListModuleSchemaNodes` and `subimageGetNodesSchema` for schema exploration. What-if simulation uses `subimageGetScenarioCapabilities` then `subimageCreateAttackPathScenario`, which run the engine rather than read the graph. Ticket and notification follow-ups use `subimageListLinearTeams`, `subimageCreateTicket`, `subimageSendNotification`.
+Paths, their steps, and the n+1 probes all read the graph through `subimageRunCypher`, backed by `subimageListModuleSchemaNodes` and `subimageGetNodesSchema` for schema exploration. What-if simulation uses `subimageGetScenarioCapabilities` then `subimageCreateAttackPathScenario`, which run the engine rather than read the graph. Ticket and notification follow-ups use `subimageListLinearTeams`, `subimageCreateTicket`, `subimageSendNotification`.
 
 ## Required inputs
 
@@ -163,8 +163,6 @@ These apply to the Mode A and Mode B queries above as well as to Mode C probes:
 - Never use unbounded variable-length paths (`-[*]->`). Bound them: `-[*1..3]->` at most.
 - Verify labels and relationships exist on real rows before reasoning about them. If `MATCH (a:Foo)-[:BAR]->(b)` returns 0 rows, the relationship is conceptual; do not present it as exploitable.
 - If `subimageRunCypher` returns 0 rows, that is itself a confirmed fact: the relationship is not present in this tenant.
-
-If you are unsure of the schema, draft the query via `subimageAgentBuildQuery(user_question=...)` and execute it with `subimageRunCypher`. Do not write Cypher from intuition.
 
 ## When to surface a candidate extension
 
