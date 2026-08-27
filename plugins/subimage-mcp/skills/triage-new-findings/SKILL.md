@@ -17,7 +17,7 @@ Lists SubImage's security rules, groups the ones with findings by tag (theme/cat
 
 ❌ User asks about a specific CVE: use `subimage-mcp:investigate-cve` instead.
 ❌ User asks about a specific attack path: use `subimage-mcp:review-attack-path`.
-❌ User wants the underlying graph (relationships, blast radius): build a Cypher query via `subimageAgentBuildQuery` then run with `subimageRunCypher`.
+❌ User wants the underlying graph (relationships, blast radius): build a Cypher query then run with `subimageRunCypher`.
 
 ## Prerequisites
 
