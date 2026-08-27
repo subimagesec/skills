@@ -20,7 +20,7 @@ Given a CVE id, pulls SubImage's full picture for it: severity, KEV status, affe
 
 ## Prerequisites
 
-This skill reads the vulnerability graph through `subimageRunCypher` (optionally with `subimageAgentBuildQuery` to draft a query). The optional internet-enrichment step uses `WebSearch` (and `WebFetch` for a specific advisory URL). The pivot at the end reads attack paths from the same graph.
+This skill reads the vulnerability graph through `subimageRunCypher`. The optional internet-enrichment step uses `WebSearch` (and `WebFetch` for a specific advisory URL). The pivot at the end reads attack paths from the same graph.
 
 ## Required inputs
 
