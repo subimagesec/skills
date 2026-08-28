@@ -49,7 +49,8 @@ Ask only when the requested tenant or scope is genuinely ambiguous.
 - Call `subimageReadMe` once per session.
 - Call `subimageListModules` before interpreting empty results. Relevant coverage
   can come from `aibom`, cloud providers, AI provider modules, and identity
-  providers.
+  providers. Module status is coverage metadata, not a query gate: historical or
+  otherwise ingested nodes may exist even when a module is absent or disabled.
 - Follow `subimage-mcp:build-cypher-query` discipline. Validate labels,
   properties, relationships, and directions with `subimageGetNodesSchema` or a
   `searchModelQueries` hit before running a template.
@@ -64,10 +65,10 @@ not empty.
 
 Read module status first. Record which relevant modules are enabled, disabled,
 stale, degraded, or still syncing. An unavailable lane is a coverage gap, not a
-zero count.
+zero count, and does not justify skipping that lane's graph query.
 
-Use `subimageListModuleSchemaNodes` only for enabled modules when the current
-provider labels are unclear. Batch likely labels into one
+Use `subimageListModuleSchemaNodes` when the current provider labels are unclear.
+Batch likely labels into one
 `subimageGetNodesSchema` call. Start with:
 
 `AIBOMSource`, `AIBOMComponent`, `AIAgent`, `AIModel`, `AITool`, `AIMemory`,
