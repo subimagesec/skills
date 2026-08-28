@@ -98,11 +98,11 @@ usage or deployment edges.
 ```cypher
 MATCH (model:AIModel)
 OPTIONAL MATCH (tenant:Tenant)-[:RESOURCE]->(model)
-OPTIONAL MATCH (consumer)-[usage:USES_MODEL|USES_EMBEDDING_MODEL|USES|INSTANCE_OF|PROVIDES_CAPACITY_FOR]->(model)
+OPTIONAL MATCH ()-[usage:USES_MODEL|USES_EMBEDDING_MODEL|USES|INSTANCE_OF|PROVIDES_CAPACITY_FOR]->(model)
 WITH model,
      collect(DISTINCT tenant.id) AS tenants,
      count(DISTINCT usage) AS usage_edge_count,
-     collect(DISTINCT labels(consumer)) AS consumer_labels
+     collect(DISTINCT labels(startNode(usage))) AS consumer_labels
 RETURN model.id AS id,
        coalesce(model._ont_name, model.model_name, model.display_name, model.name, model.id) AS name,
        model._ont_provider AS provider,
