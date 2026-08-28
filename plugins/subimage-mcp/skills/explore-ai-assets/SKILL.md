@@ -67,9 +67,10 @@ Read module status first. Record which relevant modules are enabled, disabled,
 stale, degraded, or still syncing. An unavailable lane is a coverage gap, not a
 zero count, and does not justify skipping that lane's graph query.
 
-Use `subimageListModuleSchemaNodes` when the current provider labels are unclear.
-Batch likely labels into one
-`subimageGetNodesSchema` call. Start with:
+For labels already covered by the reference templates, validate them in one
+batched `subimageGetNodesSchema` call; do not enumerate each provider module
+first. Use `subimageListModuleSchemaNodes` only when the question needs labels
+outside those templates. Start with:
 
 `AIBOMSource`, `AIBOMComponent`, `AIAgent`, `AIModel`, `AITool`, `AIMemory`,
 `AIPrompt`, `AIEmbedding`, `AWSBedrockAgent`, `AWSBedrockKnowledgeBase`,
@@ -103,6 +104,10 @@ lanes or when the user asks for detail.
 
 Do not stop after the first non-empty lane. Broad AI questions require all
 applicable lanes because the records are not one connected ontology.
+
+Keep the user's scope exact. "Across code and cloud providers" requires lanes
+1 and 2; do not add provider-account, employee-adoption, or security-posture
+queries unless the user asks for them.
 
 ### 3. Add operational context
 

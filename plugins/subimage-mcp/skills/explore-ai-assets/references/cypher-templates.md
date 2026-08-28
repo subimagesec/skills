@@ -1,7 +1,8 @@
 # Cypher templates: AI asset exploration
 
 These are starting points. Apply `subimage-mcp:build-cypher-query` validation and
-execution rules before use, and omit templates whose modules are unavailable.
+execution rules before use. Module status qualifies coverage but does not gate
+queries; existing graph data can outlive module configuration.
 
 ## Aggregate lane census
 
