@@ -38,7 +38,7 @@ Build a set `detected_providers` of raw Terraform provider names from these sign
 **Terraform providers** (strongest signal):
 
 ```bash
-grep -rEho 'provider[[:space:]]+"(aws|google|azurerm|github|kubernetes|okta|cloudflare|tailscale|datadog|gitlab|slack|pagerduty|sentry|cloudflare|snowflake|vercel|sentinelone|crowdstrike)"' \
+grep -rEho 'provider[[:space:]]+"(aws|google|azurerm|github|kubernetes|okta|cloudflare|tailscale|datadog|gitlab|slack|pagerduty|sentry|cloudflare|snowflake|vercel|railway|sentinelone|crowdstrike)"' \
   --include='*.tf' . 2>/dev/null \
   | sort -u
 ```
@@ -61,6 +61,7 @@ Normalize each Terraform provider name to the matching SubImage module slug **be
 | `pagerduty` | `pagerduty` |
 | `sentry` | `sentry` |
 | `vercel` | `vercel` |
+| `railway` | `railway` (source-deploy / FilesystemSnapshot scanning; no container image registry) |
 | `sentinelone` | `sentinelone` |
 | `crowdstrike` | `crowdstrike` |
 
