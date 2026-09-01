@@ -238,7 +238,7 @@ the highest-impact ones with you (skill: `subimage-mcp:review-attack-path`).
 
 If the user confirms:
 
-- Prefer runtime leaves (`Container` / `RailwayDeployment` / `Function`) over raw
+- Prefer runtime leaves (`Container` / `Function`) over raw
   `Image` / `FilesystemSnapshot` artifact ids when both are available.
 - For each of the top 3 to 5 exposed resources, look for paths touching it. A
   resource participates through an `AttackerCapacity`, not through the step's
