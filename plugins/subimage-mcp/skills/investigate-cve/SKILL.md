@@ -9,11 +9,13 @@ description: Investigate a specific CVE in SubImage end-to-end (severity, KEV st
 
 Given a CVE id, pulls SubImage's full picture for it: severity, KEV status, affected packages and resources, available fixes, and a one-line recommended action. After the static summary, offers to pivot into attack-path analysis on the impacted assets so the user can answer the harder question: "is this CVE actually exploitable here?"
 
+Scanned artifacts are either container **Images** (registry pull) or **FilesystemSnapshots** (source checkout for PaaS providers like Railway that do not instantiate images). Treat both as first-class; an empty image list is not "no impact" when snapshots are affected. Authoritative Cypher shapes live in `subimage-mcp:signals-via-cypher`.
+
 ## When to use
 
 ✅ User pastes or names a specific CVE id and wants to understand the impact in their environment.
 ✅ User asks "should we patch CVE-X first" or "is CVE-X in the KEV catalog".
-✅ User wants the list of containers / packages / images affected by a CVE.
+✅ User wants the list of containers / packages / images / filesystem snapshots affected by a CVE.
 
 ❌ User wants the entire vulnerability backlog: use `subimage-mcp:triage-new-findings` (compliance), or count `(:VulnerabilitySignal:Signal)` by severity for raw numbers.
 ❌ User wants to compare two CVEs: just run this skill twice and contrast the outputs.
@@ -33,13 +35,17 @@ This skill reads the vulnerability graph through `subimageRunCypher`. The option
 ### 1. Pull the full CVE record
 
 A CVE is present as one `:VulnerabilitySignal:Signal` per affected service
-image, all pointing at the same `:CVEMetadata`:
+artifact (`service_image` still names the field; the artifact may be an `Image`
+or a `FilesystemSnapshot`), all pointing at the same `:CVEMetadata`:
 
 ```cypher
 MATCH (v:VulnerabilitySignal:Signal)-[:INSTANCE_OF]->(m:CVEMetadata)
 WHERE v.cve_id = toUpper('<CVE_ID>') AND v.status IN ['active', 'accepted']
 OPTIONAL MATCH (m)-[:ENRICHES]->(f:TrivyImageFinding:CVE)-[:AFFECTS]->(p:PackageVersion)
-WHERE EXISTS { (v)-[:AFFECTS]->(:Image)<-[:DEPLOYED]-(p) }
+WHERE EXISTS {
+  (v)-[:AFFECTS]->(artifact)<-[:DEPLOYED]-(p)
+  WHERE artifact:Image OR artifact:FilesystemSnapshot
+}
 OPTIONAL MATCH (p)-[:SHOULD_UPDATE_TO]->(fix:TrivyFix)-[:APPLIES_TO]->(f)
 RETURN DISTINCT m.id AS cve, m.title AS title, m.description AS description,
        CASE
@@ -63,8 +69,9 @@ Four things this query encodes that a shorter one gets wrong:
 
 - The severity `CASE` is the fallback the product applies. `base_severity` is
   null on some CVEs, and reading it raw silently drops them.
-- The `EXISTS` clause pins each package to an image the Signal actually affects.
-  `ENRICHES` alone reaches every occurrence of that CVE across the fleet.
+- The `EXISTS` clause pins each package to an artifact (`Image` or
+  `FilesystemSnapshot`) the Signal actually affects. `ENRICHES` alone reaches
+  every occurrence of that CVE across the fleet.
 - The fix version is `TrivyFix.version`, reached through the package. There is no
   `fixed_version` property on `PackageVersion`; reading one returns null on every
   row, which reads as "nothing is fixable" instead of as an error. The
@@ -85,25 +92,28 @@ to pull the acceptance rationale as a follow-up. When rows are mixed, report the
 active ones as the open work and mention the accepted ones separately rather than
 folding them into one count.
 
-Then find where it actually runs. The Signal affects an image; the workloads
-running that image are one hop further:
+Then find where it actually runs. The Signal affects an artifact; runtimes are
+one hop further via `RESOLVED_IMAGE` (images) or `SCANNED_AS` (filesystem
+snapshots):
 
 ```cypher
-MATCH (v:VulnerabilitySignal:Signal)-[:AFFECTS]->(i:Image)<-[:RESOLVED_IMAGE]-(rt)
+MATCH (v:VulnerabilitySignal:Signal)-[:AFFECTS]->(artifact)
 WHERE v.cve_id = toUpper('<CVE_ID>') AND v.status IN ['active', 'accepted']
-  AND (rt:Container OR rt:Function)
+  AND (artifact:Image OR artifact:FilesystemSnapshot)
+MATCH (artifact)<-[:RESOLVED_IMAGE|SCANNED_AS]-(rt)
+WHERE (rt:Container OR rt:Function)
   AND (NOT rt:Container OR rt._ont_state = 'running')
 RETURN DISTINCT rt.id AS runtime_id, coalesce(rt._ont_name, rt.name) AS runtime_name,
-       labels(rt) AS labels, i.id AS image
+       labels(rt) AS labels, artifact.id AS artifact_id, labels(artifact) AS artifact_labels
 ORDER BY runtime_id
 LIMIT 100
 ```
 
-A vulnerable image nobody runs is a different conversation from a vulnerable
-image on a production container, so keep the two counts distinct in the summary.
-`subimageRunCypher` takes no query parameters, so every value above is inlined
-as a literal: escape backslashes and single quotes before substituting. ARNs
-and fully-qualified GCP/Azure ids can carry either.
+A vulnerable artifact nobody runs is a different conversation from one on a
+production container or Railway deployment, so keep those counts distinct in the
+summary. `subimageRunCypher` takes no query parameters, so every value above is
+inlined as a literal: escape backslashes and single quotes before substituting.
+ARNs and fully-qualified GCP/Azure ids can carry either.
 
 
 ### 2. Read fixability from the record
@@ -112,28 +122,30 @@ Fix data is already in step 1: each row carries `installed` and `fixed_in`, the
 latter from `TrivyFix.version`. A null `fixed_in` means no fix is published; say
 so rather than dropping the row. Derive, per package: target fix version, the
 affected workloads from the runtime query above, and whether the fix is a package
-bump or an image rebuild.
+bump, an image rebuild, or a source revision bump / redeploy (FilesystemSnapshot).
 
 Query further **only** when you need per-package detail step 1 does not carry,
 such as every other CVE on the same package:
 
 ```cypher
-MATCH (p:PackageVersion {name: '<package-name>'})-[:DEPLOYED]->(i:Image)
-MATCH (v:VulnerabilitySignal:Signal)-[:AFFECTS]->(i)
+MATCH (p:PackageVersion {name: '<package-name>'})-[:DEPLOYED]->(artifact)
+WHERE artifact:Image OR artifact:FilesystemSnapshot
+MATCH (v:VulnerabilitySignal:Signal)-[:AFFECTS]->(artifact)
 MATCH (v)-[:INSTANCE_OF]->(m:CVEMetadata)
       -[:ENRICHES]->(f:TrivyImageFinding:CVE)-[:AFFECTS]->(p)
 WHERE v.status IN ['active', 'accepted']
 OPTIONAL MATCH (p)-[:SHOULD_UPDATE_TO]->(fix:TrivyFix)-[:APPLIES_TO]->(f)
 RETURN DISTINCT m.id AS cve, m.base_severity AS severity, m.base_score AS cvss_score,
-       p.version AS installed, fix.version AS fixed_in, v.status AS status
+       p.version AS installed, fix.version AS fixed_in, v.status AS status,
+       labels(artifact) AS artifact_labels
 ORDER BY cvss_score DESC
 LIMIT 100
 ```
 
 The third `MATCH` is what makes this "CVEs in this package". Without the
 `ENRICHES`/`AFFECTS` join back onto `p`, the query returns every CVE on every
-image that happens to also carry the package, which on a busy image is thousands
-of unrelated rows.
+artifact that happens to also carry the package, which on a busy image is
+thousands of unrelated rows.
 
 If nothing is fixable, note that explicitly in the summary; the next action shifts from "patch" to "monitor / mitigate / accept".
 
@@ -156,11 +168,20 @@ Use Cypher only when:
 
 - Steps 1 and 2 point at a resource type whose surroundings you still need to map.
 - The user explicitly asks how the CVE could propagate (e.g. "if `lodash` is here, where else is it transitively?").
+- You need to separate Image-arm vs FilesystemSnapshot-arm blast radius.
 
-```
-subimageAgentBuildQuery(user_question="<rephrased intent>")
-# then:
-subimageRunCypher(query="<query returned above>")
+Draft additional reads with `subimage-mcp:build-cypher-query` (or from
+`signals-via-cypher`), then run with `subimageRunCypher`. Do not invent shapes.
+
+Useful intentional query when artifact kind is still ambiguous:
+
+```cypher
+MATCH (v:VulnerabilitySignal:Signal {cve_id: toUpper('<CVE_ID>')})-[:AFFECTS]->(artifact)
+WHERE artifact:Image OR artifact:FilesystemSnapshot
+OPTIONAL MATCH (artifact)<-[:RESOLVED_IMAGE|SCANNED_AS]-(rt)
+WHERE rt:Container OR rt:Function
+RETURN labels(artifact) AS artifact_labels, count(DISTINCT artifact) AS artifacts,
+       count(DISTINCT rt) AS runtimes
 ```
 
 Skip this step otherwise. Steps 1 and 2 already answer the common questions.
@@ -179,12 +200,14 @@ Output in this exact structure. Keep it scannable.
 
 ## Where it lands in your environment
 - <count> containers (ECS/Kubernetes) across <count> images
+- <count> containers / deployments across <count> filesystem snapshots (Railway and similar)
 - packages affected: <pkg1>, <pkg2>, ...
-- top exposed resources: [[entity:Container:<id>|<name>]], [[entity:Image:<id>|<name>]]
+- top exposed resources: [[entity:Container:<id>|<name>]], [[entity:Image:<id>|<name>]], [[entity:FilesystemSnapshot:<id>|<name>]]
 
 ## Fixability
 - **Patchable**: <count> packages have a fix → <pkg> ≥ <fixed-version>
 - **Rebuild required**: <count> images need a base image bump
+- **Redeploy / revision bump**: <count> filesystem snapshots need a new source revision
 - **No fix yet**: <count> packages, mitigation only
 
 ## External context (only if step 3 ran)
@@ -192,10 +215,10 @@ Output in this exact structure. Keep it scannable.
 - mitigations / workarounds: <one line> (<source link>)
 
 ## Recommended next action
-<one line: patch this image first, bump this package across N services, monitor and revisit, or accept and document>
+<one line: patch this image first, bump this package across N services, redeploy this Railway revision, monitor and revisit, or accept and document>
 ```
 
-Omit `EPSS` from the header line if the record has no EPSS data (`epss_score` is null). Omit the **External context** section entirely when step 3 did not run.
+Omit `EPSS` from the header line if the record has no EPSS data (`epss_score` is null). Omit the **External context** section entirely when step 3 did not run. Omit the filesystem-snapshot / redeploy bullets when the CVE touches no snapshots. Omit the image / rebuild bullets when it touches no images. Never imply "no container impact" solely because the image count is zero if snapshots are present.
 
 If KEV is `yes`, prepend a single-line callout above the title:
 
@@ -215,6 +238,8 @@ the highest-impact ones with you (skill: `subimage-mcp:review-attack-path`).
 
 If the user confirms:
 
+- Prefer runtime leaves (`Container` / `RailwayDeployment` / `Function`) over raw
+  `Image` / `FilesystemSnapshot` artifact ids when both are available.
 - For each of the top 3 to 5 exposed resources, look for paths touching it. A
   resource participates through an `AttackerCapacity`, not through the step's
   `FROM`/`TO` endpoints:
@@ -240,9 +265,11 @@ This converts a static CVE finding into a live exploitability question, which is
 - Listing every affected resource. Top 5 + a count is enough.
 - Web-searching every CVE reflexively. The internet step is for KEV/critical/no-fix/exploitability questions; otherwise offer it, don't run it.
 - Letting public web text override SubImage data about what you actually run. The graph is authoritative for your environment.
+- Treating zero `:Image` hits as "not in environment" when `:FilesystemSnapshot` findings exist for the same CVE.
 
 ## References
 
 - Tool guide (always loaded by `subimageReadMe`): Domain 3 "Vulnerability Management" and Domain 4 "Attack Path Analysis".
 - Companion skill for the pivot: `subimage-mcp:review-attack-path`.
+- Authoritative vulnerability Cypher shapes: `subimage-mcp:signals-via-cypher`.
 - Internet enrichment: `WebSearch` / `WebFetch` (NVD, vendor advisories, public PoC trackers). Use sparingly per the step-3 triggers.

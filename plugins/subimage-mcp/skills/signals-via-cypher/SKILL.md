@@ -211,14 +211,18 @@ LIMIT 20
 ```text
 (:VulnerabilitySignal:Signal)-[:INSTANCE_OF]->(:CVEMetadata)
 (:VulnerabilitySignal:Signal)-[:AFFECTS]->(:Image)<-[:RESOLVED_IMAGE]-(:Container|:Function)
+(:VulnerabilitySignal:Signal)-[:AFFECTS]->(:FilesystemSnapshot)<-[:SCANNED_AS]-(:Container)
 (:CVEMetadata)-[:ENRICHES]->(:TrivyImageFinding:CVE)-[:AFFECTS]->(:PackageVersion)
-(:PackageVersion)-[:DEPLOYED]->(:Image)
+(:PackageVersion)-[:DEPLOYED]->(:Image|:FilesystemSnapshot)
 (:PackageVersion)-[:SHOULD_UPDATE_TO]->(:TrivyFix)-[:APPLIES_TO]->(:TrivyImageFinding)
 ```
 
 A Signal is one `(cve_id, service_image)` pair, **not** one CVE: the same CVE on
 two services is two Signals. Count `DISTINCT v.cve_id` when the user asks "how
 many CVEs" and count Signals when they ask "how many vulnerabilities".
+`service_image` is the Signal's grouping key even when the affected artifact is a
+`FilesystemSnapshot` (Railway and similar source-deploy providers): those tenants
+can have full vuln coverage with zero `:Image` nodes.
 
 | Node | Fields |
 |---|---|
@@ -266,13 +270,16 @@ LIMIT 100
 Where a CVE actually runs:
 
 ```cypher
-MATCH (v:VulnerabilitySignal:Signal)-[:AFFECTS]->(i:Image)<-[:RESOLVED_IMAGE]-(rt)
+MATCH (v:VulnerabilitySignal:Signal)-[:AFFECTS]->(artifact)
 WHERE v.cve_id = toUpper('cve-2026-11111')
   AND v.status IN ['active', 'accepted']
-  AND (rt:Container OR rt:Function)
+  AND (artifact:Image OR artifact:FilesystemSnapshot)
+MATCH (artifact)<-[:RESOLVED_IMAGE|SCANNED_AS]-(rt)
+WHERE (rt:Container OR rt:Function)
   AND (NOT rt:Container OR rt._ont_state = 'running')
 RETURN DISTINCT rt.id AS runtime_id, coalesce(rt._ont_name, rt.name) AS name,
-       labels(rt) AS labels, i.id AS image, v.status AS status
+       labels(rt) AS labels, artifact.id AS artifact_id,
+       labels(artifact) AS artifact_labels, v.status AS status
 LIMIT 100
 ```
 
@@ -282,7 +289,10 @@ Fixability, per package:
 MATCH (v:VulnerabilitySignal:Signal)-[:INSTANCE_OF]->(m:CVEMetadata)
       -[:ENRICHES]->(f:TrivyImageFinding:CVE)-[:AFFECTS]->(p:PackageVersion)
 WHERE v.status IN ['active', 'accepted']
-  AND EXISTS { (v)-[:AFFECTS]->(:Image)<-[:DEPLOYED]-(p) }
+  AND EXISTS {
+    (v)-[:AFFECTS]->(artifact)<-[:DEPLOYED]-(p)
+    WHERE artifact:Image OR artifact:FilesystemSnapshot
+  }
 OPTIONAL MATCH (p)-[:SHOULD_UPDATE_TO]->(fix:TrivyFix)-[:APPLIES_TO]->(f)
 RETURN DISTINCT v.cve_id AS cve, v.status AS status, p.name AS package,
        p.version AS installed, fix.version AS fixed_in
@@ -294,8 +304,8 @@ Two joins here are load-bearing, not refinements.
 
 The `EXISTS` clause: `ENRICHES` reaches every package occurrence of that CVE
 anywhere in the fleet, so without it each Signal is reported against packages
-from images it does not affect. Pin the package to an image the Signal actually
-affects, through `DEPLOYED`.
+from artifacts it does not affect. Pin the package to an `Image` or
+`FilesystemSnapshot` the Signal actually affects, through `DEPLOYED`.
 
 The `APPLIES_TO` hop back onto `f`: a `PackageVersion` carries one
 `SHOULD_UPDATE_TO` edge per fix across **all** of its CVEs. Walk to `TrivyFix`
