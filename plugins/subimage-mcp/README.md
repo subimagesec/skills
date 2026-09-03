@@ -1,6 +1,6 @@
 # subimage-mcp
 
-Operator workflows over the [SubImage](https://subimage.io) MCP server. Each skill orchestrates a multi-tool flow: findings triage, CVE deep dive, attack-path review, IAM / container / IP investigations, coverage audit, Cypher query authoring, custom rule authoring.
+Operator workflows over the [SubImage](https://subimage.io) MCP server. Each skill orchestrates a multi-tool flow: findings triage, CVE deep dive, package origin, attack-path review, IAM / container / IP investigations, coverage audit, Cypher query authoring, custom rule authoring.
 
 ## Install
 
@@ -30,14 +30,18 @@ Open **Preferences** -> **Cursor Settings** -> **Rules, Skills, Subagents**, the
 |---|---|
 | [`subimage-mcp:triage-new-findings`](./skills/triage-new-findings/SKILL.md) | Findings digest grouped by tag/theme (rules listed directly), with recommended next steps. |
 | [`subimage-mcp:investigate-cve`](./skills/investigate-cve/SKILL.md) | Full impact, EPSS/KEV context, and fixability for a specific CVE, with opt-in internet enrichment and a pivot to attack-path exploration. |
+| [`subimage-mcp:investigate-package`](./skills/investigate-package/SKILL.md) | Trace a package from issue/CVE to image layer, classify base-image versus app origin, and assess runtime reachability. |
 | [`subimage-mcp:investigate-iam`](./skills/investigate-iam/SKILL.md) | IAM privilege audit: admin-equivalent identities, assume-role / cross-account trust chains, and PermissionSet effective permissions. |
 | [`subimage-mcp:investigate-container`](./skills/investigate-container/SKILL.md) | Image provenance, Kubernetes/EKS cluster exposure, and EKS node-count reconciliation (three modes). |
 | [`subimage-mcp:investigate-ip`](./skills/investigate-ip/SKILL.md) | Resolve IP/domain ownership across cloud resources, trace the DNS chain, and attribute public IPs (ASN/geo/VPN-proxy-Tor) via `subimageEnrichIp`. |
 | [`subimage-mcp:investigate-public-exposure`](./skills/investigate-public-exposure/SKILL.md) | Explain why a resource is public or internet-exposed, including CloudFront/S3 versus direct bucket policy causes. |
 | [`subimage-mcp:review-attack-path`](./skills/review-attack-path/SKILL.md) | Walk an attack path step by step, identify the most sensitive impacted assets, hunt for n+1 extensions, propose the fastest fix. |
 | [`subimage-mcp:improve-subimage-coverage`](./skills/improve-subimage-coverage/SKILL.md) | Scan the current repo for providers, cross-reference with `subimageListModules`, then list rules with findings and surface the top actionable ones grouped by tag. |
+| [`subimage-mcp:inventory-via-cypher`](./skills/inventory-via-cypher/SKILL.md) | Answer a flat resource-inventory question (list, count, filter, sort, breakdown) with one Cypher query: on the resource type's ontology label for a generic category, covering every provider, or on the provider-native label when the user names a specific product such as RDS or EKS. Products not covered by its tables require one schema lookup. |
+| [`subimage-mcp:signals-via-cypher`](./skills/signals-via-cypher/SKILL.md) | Answer a findings, compliance, vulnerability, package, or attack-path question with one Cypher query on the `:Signal` nodes that hold them, instead of the consolidated read tools. |
 | [`subimage-mcp:build-cypher-query`](./skills/build-cypher-query/SKILL.md) | Construct a verified Cypher query against the SubImage Neo4j graph by exploring the schema, reusing model queries, and validating with bounded probes. |
 | [`subimage-mcp:create-custom-rule`](./skills/create-custom-rule/SKILL.md) | Draft, validate against the live tenant graph, and persist a tenant-local custom Cypher rule via `subimageCreateCustomRule`. |
+| [`subimage-mcp:identify-iac-repositories`](./skills/identify-iac-repositories/SKILL.md) | Identify and rank the repositories that manage Infrastructure as Code, gated on enabled modules, grouped by confidence, and saved to memory on confirmation. |
 
 ## MCP server
 

@@ -10,7 +10,7 @@ Produce a correct Cypher query that answers the user's question, in as few tool 
 ## Hard entry gate
 
 - Before any schema discovery, model-query lookup, or Cypher execution, check whether a dedicated SubImage MCP tool can answer the user's exact question. If yes, do not use this skill.
-- If there is already a non-empty result from Issues, Vulnerabilities, Inventory, Compliance, or Attack Paths that directly answers the question: stop and answer from that result. Do not use this skill to validate, enrich, double-check, or improve confidence.
+- If there is already a non-empty result from Issues, Vulnerabilities, Compliance, or Attack Paths that directly answers the question: stop and answer from that result. Do not use this skill to validate, enrich, double-check, or improve confidence.
 - "More graph detail might exist", "validate with Cypher", and "dedicated tool result was non-empty" are not sufficient reasons. This skill is blocked unless the user explicitly asks for graph relationships, root cause, blast radius, reachability, ownership, permissions, or absence validation.
 
 ## When to use
@@ -22,7 +22,8 @@ Produce a correct Cypher query that answers the user's question, in as few tool 
 ✅ The answer requires joining graph entities across domains and no dedicated MCP tool can answer directly.
 
 ❌ A dedicated MCP tool answers the question directly.
-❌ Remediation, prioritization, action items, vulnerability lookup, package fixability, framework findings, inventory listing, or attack-path enumeration where the matching dedicated tool returned non-empty results.
+❌ Remediation, prioritization, action items, vulnerability lookup, package fixability, framework findings, or attack-path enumeration where the matching dedicated tool returned non-empty results.
+❌ A flat listing, count, or filter of ONE resource type → `subimage-mcp:inventory-via-cypher`, which maps the type to its ontology label, or to the provider-native label when the user named a specific product. Products absent from its tables use one schema lookup.
 ❌ Only trying to validate, enrich, or double-check a sufficient dedicated-tool result.
 ❌ The user has a known-good Cypher query in hand. Skip this skill and run `subimageRunCypher` directly.
 
@@ -37,7 +38,6 @@ Only these are addressed by this skill; nothing else.
 | `subimageListModules()` | Confirms which modules are synced before querying their labels. |
 | `subimageListModuleSchemaNodes(module=...)` | Discovers candidate labels for a given module when you don't know them. |
 | `subimageGetNodesSchema(node_names=[...])` | Returns the validated label, property, and relationship surface for a list of labels. |
-| `subimageGetLabelStats(labels=[...])` | Returns cardinality per label; check when you suspect a label is high-cardinality (>10 000 nodes) and your query does not filter early. |
 | `subimageRunCypher(query)` | Executes one Cypher statement. Streams to the UI as an interactive table. |
 
 ## Workflow
@@ -61,13 +61,12 @@ With the labels in hand, fire these calls on a single turn:
 
 - `searchModelQueries(labels=[...])` — looks up cached example queries for these labels. If a hit matches the question's shape, adapt it instead of authoring from scratch. (This is **not** label discovery — it requires the labels as input.)
 - `subimageGetNodesSchema(node_names=["LabelA", "LabelB", ...])` — batches every label into one call. Returns the validated properties and relationships, including authoritative relationship examples and direction. Resolves both primary labels and ontology aliases.
-- `subimageGetLabelStats(labels=[...])` — only if you suspect a label is high-cardinality and your draft will not filter on it early.
 
 Then either adapt the cached query or author one from the schema. Before writing Cypher, extract the exact relationship pattern from the schema examples for every hop. Apply the **Final query rules** below.
 
 ### Step 3 — Optional probe (at most one)
 
-If after step 2 you are still uncertain about a property's actual values, the path's shape, relationship direction, or whether matching rows exist, run **one** probe with `subimageRunCypher` using `LIMIT 5` or `COUNT(*)`. Prefer `toLower(...) CONTAINS ...` for text discovery.
+If after step 2 you are still uncertain about a property's actual values, the path's shape, relationship direction, label cardinality, or whether matching rows exist, run **one** probe with `subimageRunCypher` using `LIMIT 5` or `COUNT(*)`. Prefer `toLower(...) CONTAINS ...` for text discovery. When cardinality materially affects the query plan and the draft cannot filter early, use `MATCH (n:<ValidatedLabel>) RETURN count(n) AS node_count`; do not add a separate count when the final query already filters the label.
 
 For relationship-direction uncertainty, keep the probe bounded and typed. Use the same validated labels and relationship type in an undirected diagnostic pattern, return `labels(startNode(r))`, `type(r)`, `labels(endNode(r))`, and key IDs, then correct the final query to the directed schema shape. Do not leave the final query undirected unless direction is genuinely irrelevant and the query deduplicates rows.
 
@@ -98,7 +97,7 @@ The query passed to `subimageRunCypher` must:
 - give every node variable at least one label (no bare `MATCH (n)`); unlabeled scans touch the entire graph and time out,
 - give every relationship pattern a variable and an explicit type (e.g. `(a)-[r1:RELATES_TO]->(b)`; never `(a)-[:RELATES_TO]->(b)` or `(a)-[]->(b)`),
 - use the schema-declared direction for every relationship. If a cached model query or draft uses the opposite arrow, correct it before execution and note the correction in prose if useful.
-- include `LIMIT`, default `LIMIT 100` unless the user asks otherwise,
+- include `LIMIT`, default `LIMIT 100` unless the user asks otherwise. A query that returns only aggregate rows, such as a cardinality `COUNT(*)` probe, is the exception because `LIMIT` would not bound the underlying scan,
 - use `OPTIONAL MATCH` only when missing relationships should still preserve rows,
 - never use unbounded variable-length paths.
 
@@ -128,7 +127,7 @@ Simplify before running:
 - Reformatting `subimageRunCypher` results as a markdown table. The tool streams an interactive table; summarize, do not duplicate.
 - Looping speculative probes ("try this, no, try that"). One probe with `LIMIT 5` or `COUNT(*)`, then commit.
 - Pre-loading the full schema "just in case" via `subimageListModuleSchemaNodes` on every module. Only enumerate modules when the labels are genuinely unknown.
-- Calling `subimageGetLabelStats` for every query. Only check when a label is plausibly large and your query does not already filter it.
+- Running a separate cardinality query for every request. Use the one optional probe only when label size materially affects the query plan and the final query cannot filter early.
 - Building virtual nodes or relationships (`apoc.create.vNode` / `apoc.create.vRelationship`) to "visualize" a derived relationship.
 
 ## Special cases

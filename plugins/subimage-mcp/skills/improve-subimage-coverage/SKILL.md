@@ -27,7 +27,7 @@ This is the bridge between IaC reality and SubImage observability. Most other sk
 ## Prerequisites
 
 - The skill runs against the **current working directory**. Run it from the root of the IaC or scripts repo to maximize signal.
-- Uses `subimageListModules`, `subimageListRules`, `subimageGetRuleFindings`.
+- Uses `subimageListModules`, `subimageListRules`, `subimageRunCypher`.
 
 ## Workflow
 
@@ -38,7 +38,7 @@ Build a set `detected_providers` of raw Terraform provider names from these sign
 **Terraform providers** (strongest signal):
 
 ```bash
-grep -rEho 'provider[[:space:]]+"(aws|google|azurerm|github|kubernetes|okta|cloudflare|tailscale|datadog|gitlab|slack|pagerduty|sentry|cloudflare|snowflake|vercel|sentinelone|crowdstrike)"' \
+grep -rEho 'provider[[:space:]]+"(aws|google|azurerm|github|kubernetes|okta|cloudflare|tailscale|datadog|gitlab|slack|pagerduty|sentry|cloudflare|snowflake|vercel|railway|sentinelone|crowdstrike)"' \
   --include='*.tf' . 2>/dev/null \
   | sort -u
 ```
@@ -61,6 +61,7 @@ Normalize each Terraform provider name to the matching SubImage module slug **be
 | `pagerduty` | `pagerduty` |
 | `sentry` | `sentry` |
 | `vercel` | `vercel` |
+| `railway` | `railway` (source-deploy / FilesystemSnapshot scanning; no container image registry) |
 | `sentinelone` | `sentinelone` |
 | `crowdstrike` | `crowdstrike` |
 
@@ -111,7 +112,7 @@ Also note the inverse: modules enabled in SubImage that you do NOT see in the re
 subimageListRules()
 ```
 
-This returns every rule with `id`, `name`, `description`, `tags`, `findings_count`, `has_findings`, and `disabled`. There is **no** `framework` parameter; do not pass one. Findings live on rules, and each rule carries its own `tags` (theme/category) and, via `subimageGetRuleFindings`, its compliance `frameworks`. Tags are the grouping axis here, not frameworks.
+This returns every rule with `id`, `name`, `description`, `tags`, `findings_count`, `has_findings`, and `disabled`. There is **no** `framework` parameter; do not pass one. Findings live on rules, and each rule carries its own `tags` (theme/category) and, through `(:Rule)-[:MAPS_TO]->(:Framework)` in the graph, its compliance frameworks. Tags are the grouping axis here, not frameworks.
 
 Keep only rows where `has_findings` is true (`findings_count > 0`) and `disabled` is false. If that set is empty, the rule set is not producing findings yet (modules may still be syncing, or no rules are enabled): say so and skip step 5.
 
@@ -122,13 +123,40 @@ Group the kept rules by `tags` (a rule with multiple tags appears in each of its
 1. Whether the tag group ties to a slug in `detected_modules` OR a module just promoted out of the gap list (relevance to this repo wins).
 2. Findings count (desc).
 
-Take a candidate top ~8 rules, then call `subimageGetRuleFindings` on each:
+Take a candidate top ~8 rules, then pull their findings in one query. Findings
+are `:Signal` nodes in the graph, one per affected asset. Slice per rule, not
+globally:
 
-```
-subimageGetRuleFindings(rule_id="<rule-id>")
+```cypher
+MATCH (r:Rule)
+WHERE r.id IN ['<rule-id-1>', '<rule-id-2>']
+CALL (r) {
+  MATCH (r)-[:PRODUCED]->(f:Finding:Signal)
+  WHERE f.status = 'active'
+  RETURN f
+  ORDER BY f.first_seen DESC
+  LIMIT 12
+}
+OPTIONAL MATCH (f)-[:AFFECTS {role: 'primary'}]->(n)
+RETURN r.id AS rule, f.display_name AS asset_name, n.id AS asset_id,
+       labels(n) AS asset_labels, f.fields_json AS fields_json,
+       f.first_seen AS first_seen
+ORDER BY rule, asset_name
 ```
 
-Capture: severity, a few representative resources (with entity tags), account or project distribution, and (optional context) the `frameworks` the rule belongs to. Now that severity is available, re-rank by severity (critical → high → medium → low), then findings count, and keep the top 5.
+`subimageRunCypher` returns at most 100 rows whatever `LIMIT` you write, so
+`rules x per-rule limit` has to stay under it: 8 rules at 12 is 96. A single
+global `LIMIT 100` ordered by rule name would let one noisy rule consume the
+entire budget, leaving every other rule looking clean when it is not. Keep the
+`CALL (r) { ... }` subquery; that is what makes the slice per rule.
+
+Keep the asset match optional and outside the subquery. A large standing fraction
+of active Findings has no `AFFECTS` edge, so a mandatory match would silently drop
+them and make a rule look better covered than it is. Selecting `f` first also
+keeps the `LIMIT` counting Findings rather than joined rows. When `asset_id` is
+null, take the id from `fields_json` and the name from `display_name`.
+
+Capture: a few representative resources (with entity tags), account or project distribution, and (optional context) the frameworks the rule belongs to, via `(r)-[:MAPS_TO]->(:Framework)`, whose id is `{short_name}:{scope}` such as `cis:aws` or `soc2:tsc`. Findings carry no severity field, so keep the ranking above (repo relevance, then findings count) and take the top 5.
 
 ### 6. Output
 
@@ -151,7 +179,7 @@ If empty: omit this section.
 
 ## Top actionable findings (by tag)
 ### <tag group, e.g. "iam" / "exposure" / "encryption">
-1. <rule title>: <count> findings, severity <X>
+1. <rule title>: <count> findings
    - hot resources: [[entity:<Label>:<id>|<short>]] (+<rest>)
    - tied to: <provider> *(newly detected: yes/no)*
    - next step: <one line>

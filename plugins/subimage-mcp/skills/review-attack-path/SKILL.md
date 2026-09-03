@@ -23,12 +23,12 @@ Optional what-if simulation overlays any of the above.
 ✅ User wants a what-if: "if attacker compromises X, what happens?".
 ✅ User just finished `subimage-mcp:investigate-cve` and confirmed the pivot.
 
-❌ User wants the full path catalog: just call `subimageListAttackPaths` and summarize without going step by step.
+❌ User wants the full path catalog: just list `(:AttackPath:Signal)` and summarize without going step by step.
 ❌ User wants the static rule set behind the engine: that is `subimage-mcp:triage-new-findings` for findings, or the doc.
 
 ## Prerequisites
 
-Uses `subimageListAttackPaths`, `subimageGetAttackPathDetails`, `subimageGetAttackPathsFromAsset`, `subimageGetScenarioCapabilities`, `subimageCreateAttackPathScenario`, `subimageRunCypher` (with `subimageAgentBuildQuery` to draft queries), `subimageListModuleSchemaNodes`, and `subimageGetNodesSchema`. Ticket and notification follow-ups use `subimageListLinearTeams`, `subimageCreateTicket`, `subimageSendNotification`.
+Paths, their steps, and the n+1 probes all read the graph through `subimageRunCypher`, backed by `subimageListModuleSchemaNodes` and `subimageGetNodesSchema` for schema exploration. What-if simulation uses `subimageGetScenarioCapabilities` then `subimageCreateAttackPathScenario`, which run the engine rather than read the graph. Ticket and notification follow-ups use `subimageListLinearTeams`, `subimageCreateTicket`, `subimageSendNotification`.
 
 ## Required inputs
 
@@ -36,7 +36,7 @@ Pick one entry mode and collect the matching values. **If anything is missing, a
 
 | Entry mode | Required value | If missing, ask |
 |---|---|---|
-| Walk a known path | `<ATTACK_PATH_ID>` | "What is the attack path id? You can find it in the URL when viewing a path in SubImage, or call `subimageListAttackPaths` and pick one." |
+| Walk a known path | `<ATTACK_PATH_ID>` | "What is the attack path id? You can find it in the URL when viewing a path in SubImage, or list the active paths with Cypher and pick one (see Mode A)." |
 | Pivot from an asset | `<ASSET_ID>` (resource ARN or fully-qualified id) | "What is the asset id? Resource ARN for AWS, fully-qualified id for GCP/Azure, or the SubImage detail-page URL works." |
 | n+1 extension hunt | a starting `<ATTACK_PATH_ID>` *or* an `<ASSET_ID>` already known to be a terminal node of interest | "Where should I start the n+1 hunt: from a specific path's terminal node, or from an asset I should treat as compromised?" |
 
@@ -44,7 +44,7 @@ For a what-if scenario, also collect:
 
 | Value | If missing, ask |
 |---|---|
-| `<NODE_LABEL>` | "Which node label is the starting point? (e.g. `EC2Instance`, `S3Bucket`, `User`)." |
+| `<NODE_LABEL>` | "Which node label is the starting point? (e.g. `AWSEC2Instance`, `AWSS3Bucket`, `User`)." |
 | Capabilities to grant | "Which attacker capabilities should I simulate? Run `subimageGetScenarioCapabilities` first to see what is valid for this node label." |
 
 ## Posture (read this before calling any tool)
@@ -64,7 +64,25 @@ The graph is the source of truth. Be conservative.
 
 ### Mode A: walk a known attack path
 
-1. Call `subimageGetAttackPathDetails(attack_path_id="<ATTACK_PATH_ID>")`.
+1. Read the path's ordered steps. An attack path is an `:AttackPath:Signal` and
+   its steps hang off it by position:
+   ```cypher
+   MATCH (a:AttackPath:Signal {id: '<ATTACK_PATH_ID>'})-[h:HAS_STEP]->(s:AttackPathStep)
+   OPTIONAL MATCH (s)-[:FROM]->(src)
+   OPTIONAL MATCH (s)-[:TO]->(dst)
+   RETURN a.title AS title, a.criticality_score AS criticality,
+          h.position AS position, s.transition_id AS transition,
+          s.capability AS capability, s.description AS description,
+          collect(DISTINCT src.id) AS from_ids, collect(DISTINCT dst.id) AS to_ids
+   ORDER BY position
+   ```
+   Use `s.description`, which is the rendered step text. `s.templated_description`
+   still holds unrendered placeholders and is not for display. This result is
+   bounded by construction (one path's steps), so it takes no `LIMIT`.
+
+   `FROM|TO` is the correct join *here*, because these are the endpoints the step
+   displays and the path id is already known. It is not the join for finding
+   which paths touch an asset; see Mode B.
 2. Decompose the path into four parts:
    - **Initial compromise**: the entry node and what gets the attacker in.
    - **Key pivots**: the 1 to 3 transitions that materially change the attacker's position (privilege gain, network reach, data access).
@@ -75,8 +93,33 @@ The graph is the source of truth. Be conservative.
 
 ### Mode B: pivot from an asset
 
-1. Call `subimageGetAttackPathsFromAsset(asset_id="<ASSET_ID>")`. SubImage returns paths sorted by criticality.
-2. If empty: "No known attack path involves `<ASSET_ID>` right now. The asset may still be at risk via paths the engine has not modeled. Want me to run the n+1 extension hunt (Mode C) starting from this asset?"
+1. Find the paths that touch the asset. An asset participates through an
+   `AttackerCapacity`, so the join runs `REASON|ON` to the capacity and `GRANTS`
+   back to the step:
+   ```cypher
+   MATCH (n {id: '<ASSET_ID>'})-[:REASON|ON]-(c:AttackerCapacity)
+         <-[:GRANTS]-(:AttackPathStep)<-[:HAS_STEP]-(a:AttackPath:Signal)
+   WHERE coalesce(a.status, 'active') IN ['active', 'accepted']
+   RETURN DISTINCT a.id AS id, a.title AS title, a.criticality_score AS criticality,
+          a.context_type AS context, coalesce(a.status, 'active') AS status
+   ORDER BY criticality DESC, id
+   LIMIT 20
+   ```
+   **Do not rewrite this as `(:AttackPathStep)-[:FROM|TO]->(n)`.** `FROM` and `TO`
+   are derived edges holding the endpoints a step *displays*: `TO` comes from the
+   step's own capacity, `FROM` from the previous step's. An asset can be the
+   `REASON` a capacity holds without ever being an endpoint, and matching
+   endpoints reports "no path" for exactly those assets. The endpoint join is the
+   right one for rendering a path you already have, which is what Mode A does; it
+   is the wrong one for discovering paths.
+
+   `coalesce` on the status is not defensive padding: a path Signal can carry no
+   `status` property, and that counts as active.
+
+   `context_type` is returned rather than filtered, matching the product's own
+   lookup. Narrow to `'default'` when the user asked for the environment-wide
+   picture, or when the same path is coming back once per context.
+2. If empty: "No known attack path involves `<ASSET_ID>` right now. The asset may still be at risk via paths the engine has not modeled. Want me to run the n+1 extension hunt (Mode C) starting from this asset?" This reassurance is only sound with the capacity join above.
 3. If non-empty: pick the top 1 to 3, run Mode A on each.
 
 ### Mode C: hunt for n+1 extensions
@@ -109,16 +152,17 @@ Only when the user asks ("what if X is compromised", "simulate granting Y").
 
 ## Cypher rules for graph probes
 
-When running Cypher in Mode C (and any time you escalate to `subimageRunCypher`):
+These apply to the Mode A and Mode B queries above as well as to Mode C probes:
 
+- `subimageRunCypher` takes no query parameters, so `<ATTACK_PATH_ID>` and `<ASSET_ID>` are inlined as literals. Escape backslashes and single quotes before substituting; ARNs and fully-qualified GCP/Azure ids can carry either, and an unescaped apostrophe breaks the statement.
+- The tool returns at most 100 rows whatever `LIMIT` you write, and reports the true `total_count` alongside. That is well above anything here, but quote `total_count` rather than the page size if a probe ever hits it.
+- The attack-path relationship inventory is closed. Steps have `<-[:HAS_STEP]-`, `-[:GRANTS]->`, `-[:FROM]->`, `-[:TO]->`; capacities have `<-[:GRANTS]-`, `-[:ON]->`, `-[:REASON]->`, and `REQUIRED` to other capacities. There is no `(:AttackPathStep)-[:ON]->` or `(:AttackPathStep)-[:REASON]->`; those two hang off the capacity.
 - Always cap exploratory queries: `LIMIT 5`. Wider scans burn tokens and add no signal.
 - Start broad, then refine. First query confirms the shape exists; second query gets the specific rows.
 - For text matching, prefer `toLower(prop) CONTAINS "term"` over regex.
 - Never use unbounded variable-length paths (`-[*]->`). Bound them: `-[*1..3]->` at most.
 - Verify labels and relationships exist on real rows before reasoning about them. If `MATCH (a:Foo)-[:BAR]->(b)` returns 0 rows, the relationship is conceptual; do not present it as exploitable.
 - If `subimageRunCypher` returns 0 rows, that is itself a confirmed fact: the relationship is not present in this tenant.
-
-If you are unsure of the schema, draft the query via `subimageAgentBuildQuery(user_question=...)` and execute it with `subimageRunCypher`. Do not write Cypher from intuition.
 
 ## When to surface a candidate extension
 

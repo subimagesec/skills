@@ -21,7 +21,7 @@ The graph is authoritative for internal ownership; `subimageEnrichIp` adds the e
 ✅ Triaging an IP or domain from a log line, alert, or finding.
 ✅ Tracing a domain's resolution chain to the resource behind it.
 
-❌ Listing all your public IPs → `subimageGetInventory` with `inventory_type=publicips`.
+❌ Listing all your public IPs → `subimage-mcp:inventory-via-cypher` (the `:PublicIP` label).
 ❌ Explaining why a resource is public/exposed → `subimage-mcp:investigate-public-exposure`.
 ❌ The attack path from an exposed resource → `subimage-mcp:review-attack-path`.
 
@@ -39,9 +39,9 @@ Known list-typed properties (schema-validate, as this drifts):
 
 | Node label | Property |
 |---|---|
-| `CloudFrontDistribution` | `aliases`, `geo_restriction_locations` |
+| `AWSCloudFrontDistribution` | `aliases`, `geo_restriction_locations` |
 | `GCPRecordSet` | `data` |
-| `EC2SecurityGroup` | `inbound_rules`, `outbound_rules` |
+| `AWSEC2SecurityGroup` | `inbound_rules`, `outbound_rules` |
 
 When unsure whether a property is scalar or list, probe one row: `MATCH (n:Label) WHERE n.prop IS NOT NULL RETURN apoc.meta.cypher.type(n.prop) LIMIT 1`.
 

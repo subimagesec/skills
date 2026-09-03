@@ -75,6 +75,7 @@ Read these before generating commands; they correct the most common wrong assump
 - **Sync calls bill against the host project.** Enable APIs on the host project that owns the pool/provider. Optional API gaps do not break the whole sync; SubImage logs warnings and skips those collectors.
 - **Selective sync has hidden dependencies.** `policy_bindings` depends on `iam`. `permission_relationships` depends on both `iam` and `policy_bindings`. `bigquery_connection` depends on `bigquery`.
 - **Do not pass placeholder strings.** Substitute `<ORG_ID>`, `<HOST_PROJECT>`, `<TENANT_ACCOUNT_ID>`, and `<TENANT_ID>` before running any command.
+- **A Secrets Manager ARN needs the separate Secrets account setup.** `SubImageScanRole` does not grant secret access. Before using an ARN for the service-account-key fallback, configure the account and `SubImageSecretsRole` as described below.
 
 ## Path A: Terraform
 
@@ -323,6 +324,15 @@ gcloud iam service-accounts keys create subimage-sa.json \
 
 Store the key in AWS Secrets Manager and paste the ARN into `gcp_service_account_key`, or paste the JSON into SubImage's managed secret field.
 
+If using AWS Secrets Manager:
+
+1. Open SubImage → **Settings → Configuration** and save the AWS account ID that owns the secret.
+2. Copy the SubImage-generated External ID.
+3. Deploy `SubImageSecretsRole` in that account with a trust-policy `sts:ExternalId` condition matching the copied value.
+4. Paste the secret ARN into `gcp_service_account_key`.
+
+SubImage supports one Secrets account per tenant. The managed secret field does not require this AWS setup.
+
 ## Verification
 
 There is no customer-side `gcloud --impersonate-service-account` check for the direct-WIF path because SubImage does not impersonate a Google service account. Verify the setup by checking the IAM binding target and then running the SubImage sync.
@@ -361,4 +371,5 @@ Look for `gcp` with `status: synced`. If the sync fails with GCP API `PERMISSION
 ## References
 
 - Canonical doc: https://app.subimage.io/docs/modules/gcp
+- Secrets account setup: https://app.subimage.io/docs/secrets
 - Workload Identity Federation with AWS: https://cloud.google.com/iam/docs/workload-identity-federation-with-other-clouds

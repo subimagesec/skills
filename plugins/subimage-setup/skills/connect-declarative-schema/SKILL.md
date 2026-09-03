@@ -15,12 +15,12 @@ Loads custom nodes and relationships into SubImage's Neo4j graph from JSONL file
 
 ## When to use
 
-✅ User has a service/app catalog, owner mapping, or CMDB they want joined against existing SubImage nodes (`AWSAccount`, `AWSUser`, `EC2Instance`, etc.).
+✅ User has a service/app catalog, owner mapping, or CMDB they want joined against existing SubImage nodes (`AWSAccount`, `AWSUser`, `AWSEC2Instance`, etc.).
 ✅ User wants to attach business criticality or team metadata to existing cloud resources.
 ✅ User already runs the GCP module and wants to drop data on GCS, or owns an AWS account they can deploy IAM in.
 
 ❌ User wants arbitrary ETL or transforms during ingestion: Declarative Schema is declarative only. Pre-shape the JSONL before upload.
-❌ User wants to *modify* properties on nodes ingested by another module (e.g. write to an `EC2Instance` node directly): use relationships instead, do not redeclare existing labels.
+❌ User wants to *modify* properties on nodes ingested by another module (e.g. write to an `AWSEC2Instance` node directly): use relationships instead, do not redeclare existing labels.
 ❌ User wants real-time push of records: this is sync-based, not event-driven.
 
 ## Required inputs

@@ -1,15 +1,15 @@
 # Cypher templates: IP / domain investigation
 
-Starting-point queries for `investigate-ip`. **Schema-validate before trusting** (`subimageGetNodesSchema`, `searchModelQueries`) and adjust to the live schema. Always pass the IP/domain as the `$value` parameter; never interpolate it. For **list-typed** properties (`CloudFrontDistribution.aliases`, `GCPRecordSet.data`, security-group rule lists) use `ANY(x IN prop WHERE x = $value)`, never `prop = $value`. Each query is `LIMIT`-bounded.
+Starting-point queries for `investigate-ip`. **Schema-validate before trusting** (`subimageGetNodesSchema`, `searchModelQueries`) and adjust to the live schema. Always pass the IP/domain as the `$value` parameter; never interpolate it. For **list-typed** properties (`AWSCloudFrontDistribution.aliases`, `GCPRecordSet.data`, security-group rule lists) use `ANY(x IN prop WHERE x = $value)`, never `prop = $value`. Each query is `LIMIT`-bounded.
 
 ## IP Address Queries
 
 ### EC2 instances
 
 ```cypher
-MATCH (a:AWSAccount)-[:RESOURCE]->(i:EC2Instance)
+MATCH (a:AWSAccount)-[:RESOURCE]->(i:AWSEC2Instance)
 WHERE i.publicipaddress = $value OR i.privateipaddress = $value
-RETURN 'EC2Instance' AS resource_type, i.instanceid AS resource_id, i.instanceid AS name,
+RETURN 'AWSEC2Instance' AS resource_type, i.instanceid AS resource_id, i.instanceid AS name,
        a.name AS account, i.region AS region,
        CASE WHEN i.publicipaddress = $value THEN 'publicipaddress' ELSE 'privateipaddress' END AS matched_field
 LIMIT 100
@@ -18,9 +18,9 @@ LIMIT 100
 ### Elastic IP addresses
 
 ```cypher
-MATCH (a:AWSAccount)-[:RESOURCE]->(eip:ElasticIPAddress)
+MATCH (a:AWSAccount)-[:RESOURCE]->(eip:AWSElasticIPAddress)
 WHERE eip.public_ip = $value OR eip.private_ip_address = $value
-RETURN 'ElasticIPAddress' AS resource_type, eip.id AS resource_id, eip.public_ip AS name,
+RETURN 'AWSElasticIPAddress' AS resource_type, eip.id AS resource_id, eip.public_ip AS name,
        a.name AS account, eip.region AS region,
        CASE WHEN eip.public_ip = $value THEN 'public_ip' ELSE 'private_ip_address' END AS matched_field
 LIMIT 100
@@ -115,9 +115,9 @@ LIMIT 100
 ### CloudFront distributions: `aliases` is a LIST (use `ANY`)
 
 ```cypher
-MATCH (a:AWSAccount)-[:RESOURCE]->(cf:CloudFrontDistribution)
+MATCH (a:AWSAccount)-[:RESOURCE]->(cf:AWSCloudFrontDistribution)
 WHERE cf.domain_name = $value OR ANY(alias IN cf.aliases WHERE alias = $value)
-RETURN 'CloudFrontDistribution' AS resource_type, cf.id AS resource_id, cf.domain_name AS name,
+RETURN 'AWSCloudFrontDistribution' AS resource_type, cf.id AS resource_id, cf.domain_name AS name,
        a.name AS account,
        CASE WHEN cf.domain_name = $value THEN 'domain_name' ELSE 'aliases' END AS matched_field
 LIMIT 100
@@ -153,8 +153,8 @@ LIMIT 100
 ### EC2 instance public DNS
 
 ```cypher
-MATCH (a:AWSAccount)-[:RESOURCE]->(i:EC2Instance) WHERE i.publicdnsname = $value
-RETURN 'EC2Instance' AS resource_type, i.instanceid AS resource_id, i.instanceid AS name,
+MATCH (a:AWSAccount)-[:RESOURCE]->(i:AWSEC2Instance) WHERE i.publicdnsname = $value
+RETURN 'AWSEC2Instance' AS resource_type, i.instanceid AS resource_id, i.instanceid AS name,
        a.name AS account, i.region AS region, 'publicdnsname' AS matched_field
 LIMIT 100
 ```
