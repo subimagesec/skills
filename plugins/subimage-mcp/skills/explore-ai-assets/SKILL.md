@@ -34,6 +34,10 @@ sources.
 ❌ A flat inventory of one already-known non-AI resource type. Use
 `subimage-mcp:inventory-via-cypher`.
 
+❌ A flat inventory of one provider-native AI type, such as "list our Bedrock
+agents." Use `subimage-mcp:inventory-via-cypher`. Use this skill when the user
+wants AI-semantic or cross-lane exploration.
+
 ❌ A vulnerability, package, IAM, or exposure investigation whose starting asset
 is already known. Use the matching investigation skill.
 
@@ -74,10 +78,17 @@ outside those templates. Start with:
 
 `AIBOMSource`, `AIBOMComponent`, `AIAgent`, `AIModel`, `AITool`, `AIMemory`,
 `AIPrompt`, `AIEmbedding`, `AWSBedrockAgent`, `AWSBedrockKnowledgeBase`,
-`AWSBedrockGuardrail`, `AWSSageMakerEndpoint`, `AWSSageMakerModel`,
-`GCPVertexAIEndpoint`, `GCPVertexAIDeployedModel`,
-`GCPVertexAIWorkbenchInstance`, `ThirdPartyApp`, `APIKey`, and the provider
-tenant labels returned by discovery.
+`AWSBedrockGuardrail`, `AWSBedrockProvisionedModelThroughput`, `AWSRole`,
+`AWSLambda`, `AWSSageMakerEndpoint`, `AWSSageMakerModel`,
+`AWSSageMakerEndpointConfig`, `GCPVertexAIEndpoint`,
+`GCPVertexAIDeployedModel`, `GCPVertexAIModel`,
+`GCPVertexAIWorkbenchInstance`, `Tenant`, `AWSAccount`, `GCPProject`,
+`AzureSubscription`, `OpenAIOrganization`, `OpenAIProject`, `OpenAIUser`,
+`OpenAIServiceAccount`, `OpenAIApiKey`, `OpenAIAdminApiKey`,
+`AnthropicOrganization`, `AnthropicWorkspace`, `AnthropicUser`,
+`AnthropicApiKey`, `ThirdPartyApp`, `UserAccount`, `Rule`, `Finding`, `Signal`,
+`Container`, `Image`, `CodeRepository`, `FilesystemSnapshot`, `APIKey`, and the
+provider tenant labels returned by discovery.
 
 Do not assume this list is exhaustive. Use current module schema to discover new
 provider-native AI resources, including any Azure AI labels added after this
@@ -99,8 +110,7 @@ lanes or when the user asks for detail.
    users, service accounts, and API keys.
 4. **Employee adoption**: AI-related `ThirdPartyApp` nodes and authorizing
    identities. Treat name matching as heuristic evidence.
-5. **Security posture**: AI-tagged rules/findings, sensitive OAuth grants,
-   provider-key hygiene, and AIBOM coverage gaps.
+5. **Security posture**: AI-tagged rules/findings and AIBOM coverage gaps.
 
 Do not stop after the first non-empty lane. Broad AI questions require all
 applicable lanes because the records are not one connected ontology.
