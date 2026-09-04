@@ -32,6 +32,7 @@ Open **Preferences** -> **Cursor Settings** -> **Rules, Skills, Subagents**, the
 | [`subimage-mcp:investigate-cve`](./skills/investigate-cve/SKILL.md) | Full impact, EPSS/KEV context, and fixability for a specific CVE, with opt-in internet enrichment and a pivot to attack-path exploration. |
 | [`subimage-mcp:investigate-package`](./skills/investigate-package/SKILL.md) | Trace a package from issue/CVE to image layer, classify base-image versus app origin, and assess runtime reachability. |
 | [`subimage-mcp:investigate-iam`](./skills/investigate-iam/SKILL.md) | IAM privilege audit: admin-equivalent identities, assume-role / cross-account trust chains, and PermissionSet effective permissions. |
+| [`subimage-mcp:explore-ai-assets`](./skills/explore-ai-assets/SKILL.md) | Explore AI assets across code scans, cloud services, provider accounts, third-party apps, credentials, findings, and coverage gaps. |
 | [`subimage-mcp:investigate-container`](./skills/investigate-container/SKILL.md) | Image provenance, Kubernetes/EKS cluster exposure, and EKS node-count reconciliation (three modes). |
 | [`subimage-mcp:investigate-ip`](./skills/investigate-ip/SKILL.md) | Resolve IP/domain ownership across cloud resources, trace the DNS chain, and attribute public IPs (ASN/geo/VPN-proxy-Tor) via `subimageEnrichIp`. |
 | [`subimage-mcp:investigate-public-exposure`](./skills/investigate-public-exposure/SKILL.md) | Explain why a resource is public or internet-exposed, including CloudFront/S3 versus direct bucket policy causes. |
