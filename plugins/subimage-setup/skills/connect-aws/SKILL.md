@@ -37,12 +37,18 @@ arn:aws:iam::<TENANT_ACCOUNT_ID>:role/<TENANT_ID>-subimage-readonly
 
 ## Permissions baseline
 
-`SubImageScanRole` needs:
+`SubImageScanRole` needs the AWS managed policy `arn:aws:iam::aws:policy/SecurityAudit` plus these six inline policies. The names and actions match the canonical SubImage template, and every path below includes the full JSON.
 
-- AWS managed policy `arn:aws:iam::aws:policy/SecurityAudit`
-- Inline policies for SSO read, EKS identity read, public SSM parameter read, and ECR read (full JSON in every path below)
+| Inline policy | Grants |
+|---|---|
+| `AllowSSOResourceSpecificActions` | IAM Identity Center (SSO) reads that support resource-level permissions, scoped to SSO ARNs |
+| `AllowSSOGlobalActions` | IAM Identity Center and Identity Store reads that do not support resource-level permissions |
+| `AllowEKSIdentityRead` | EKS access entry and identity provider config reads |
+| `AllowPublicSSMParameterRead` | AWS-managed public SSM parameters under `/aws/service/` |
+| `AllowECRRead` | ECR image pulls used by the image scanner |
+| `AllowGlueInspectorRead` | `glue:GetConnections` and `inspector2:ListMembers` for the glue and inspector sync stages |
 
-`SecurityAudit` already covers most discovery actions including `eks:DescribeCluster` and `eks:ListAccessEntries`. The inline additions cover SSO assignments, EKS identity provider configs, AWS-managed public SSM parameters, and ECR image pulls used by the image scanner.
+`SecurityAudit` already covers most discovery actions including `eks:DescribeCluster` and `eks:ListAccessEntries`. Keep the policy names and action lists identical across paths.
 
 ## Gotchas
 
@@ -51,10 +57,13 @@ Read these before generating any commands; they correct the most common wrong as
 - **Service-managed StackSets skip the management account.** Targeting the org root is not enough. Deploy a standalone stack on the management account separately if you want it scanned.
 - **`SecurityAudit` is broad but not complete.** It covers `eks:DescribeCluster` and `eks:ListAccessEntries`. The inline `AllowEKSIdentityRead` adds only the three actions that are missing (`DescribeAccessEntry`, `ListIdentityProviderConfigs`, `DescribeIdentityProviderConfig`). Do not duplicate or you make the policy harder to audit.
 - **Public SSM parameter reads need an explicit permission.** `SecurityAudit` does not include `ssm:GetParametersByPath`. Scope `AllowPublicSSMParameterRead` to the accountless `/aws/service/...` public parameter hierarchy so SubImage can ingest its default Bottlerocket and EKS optimized AMI recommendation paths.
+- **Glue and Inspector reads need an explicit permission.** `SecurityAudit` does not include `glue:GetConnections` or `inspector2:ListMembers`. Without `AllowGlueInspectorRead`, the AWS glue and inspector sync stages fail with `AccessDenied`.
+- **Keep the SSO policies as two scoped lists.** `AllowSSOResourceSpecificActions` scopes the Identity Center reads that support resource-level permissions to SSO ARNs. `AllowSSOGlobalActions` holds the SSO and Identity Store reads that do not support them, so it uses `Resource: '*'`. Do not collapse either one into `sso:Describe*`, `sso:Get*`, or `sso:List*` wildcards. Wildcards grant more than the canonical template does, and the role no longer matches what the SubImage docs tell customers to deploy.
 - **Principal ARN format is non-obvious.** It is `arn:aws:iam::<TENANT_ACCOUNT_ID>:role/<TENANT_ID>-subimage-readonly`. The role name is `<TENANT_ID>-subimage-readonly`, NOT `subimage-readonly` or `<tenant>-readonly`. Copying the wrong form means the trust policy passes `terraform plan` but every sync fails with `AccessDenied`.
 - **Service-managed StackSets need org-level prerequisites.** AWS Organizations must be set up with all-features enabled and trusted access for CloudFormation StackSets. If `create-stack-set --permission-model SERVICE_MANAGED` fails with "trusted access is not enabled", run `aws organizations enable-aws-service-access --service-principal=stacksets.cloudformation.amazonaws.com` first.
 - **IAM is global; pick one StackSet region.** The role gets created once per account regardless of how many regions you target. Use `us-east-1` and stop. Multi-region targeting on an IAM-only stack just multiplies the work.
 - **Do not pass the placeholder strings.** `<TENANT_ACCOUNT_ID>` and `<TENANT_ID>` are typed in this skill so it is obvious you must substitute. AWS will accept the literal string in the trust policy and the trust will silently never resolve.
+- **Roles from an older copy of this skill need an update.** Earlier versions granted SSO through a single `AllowSSORead` wildcard policy and had no `AllowGlueInspectorRead`. Re-deploy with the current policies: update the StackSet and the management-account stack (Path A), or run `terraform apply` (Path B). Both remove `AllowSSORead` for you. For Path C, follow the update step at the end of that section, because `put-role-policy` never removes a policy.
 
 ## Path A: CloudFormation StackSet (recommended for AWS Organizations)
 
@@ -81,6 +90,82 @@ Deploys the role into every existing and future account in the organization. Ser
          ManagedPolicyArns:
            - arn:aws:iam::aws:policy/SecurityAudit
          Policies:
+           - PolicyName: AllowSSOResourceSpecificActions
+             PolicyDocument:
+               Version: '2012-10-17'
+               Statement:
+                 - Effect: Allow
+                   Action:
+                     - sso:DescribeAccountAssignmentCreationStatus
+                     - sso:DescribeAccountAssignmentDeletionStatus
+                     - sso:DescribeApplication
+                     - sso:DescribeApplicationAssignment
+                     - sso:DescribeApplicationProvider
+                     - sso:DescribeInstance
+                     - sso:DescribeInstanceAccessControlAttributeConfiguration
+                     - sso:DescribePermissionSet
+                     - sso:DescribePermissionSetProvisioningStatus
+                     - sso:DescribeTrustedTokenIssuer
+                     - sso:GetApplicationAccessScope
+                     - sso:GetApplicationAssignmentConfiguration
+                     - sso:GetApplicationAuthenticationMethod
+                     - sso:GetApplicationGrant
+                     - sso:GetInlinePolicyForPermissionSet
+                     - sso:GetPermissionsBoundaryForPermissionSet
+                     - sso:ListAccountAssignmentCreationStatus
+                     - sso:ListAccountAssignmentDeletionStatus
+                     - sso:ListAccountAssignments
+                     - sso:ListAccountAssignmentsForPrincipal
+                     - sso:ListAccountsForProvisionedPermissionSet
+                     - sso:ListApplicationAccessScopes
+                     - sso:ListApplicationAssignments
+                     - sso:ListApplicationAssignmentsForPrincipal
+                     - sso:ListApplicationAuthenticationMethods
+                     - sso:ListApplicationGrants
+                     - sso:ListApplicationProviders
+                     - sso:ListCustomerManagedPolicyReferencesInPermissionSet
+                     - sso:ListManagedPoliciesInPermissionSet
+                     - sso:ListPermissionSetProvisioningStatus
+                     - sso:ListPermissionSets
+                     - sso:ListPermissionSetsProvisionedToAccount
+                     - sso:ListTagsForResource
+                     - sso:ListTrustedTokenIssuers
+                   Resource:
+                     - 'arn:aws:sso::*:application/*/*'
+                     - 'arn:aws:sso::*:trustedTokenIssuer/*/*'
+                     - 'arn:aws:sso:::account/*'
+                     - 'arn:aws:sso:::instance/*'
+                     - 'arn:aws:sso:::permissionSet/*/*'
+                     - 'arn:aws:sso::aws:applicationProvider/*'
+           - PolicyName: AllowSSOGlobalActions
+             PolicyDocument:
+               Version: '2012-10-17'
+               Statement:
+                 - Effect: Allow
+                   Action:
+                     - sso:DescribeRegisteredRegions
+                     - sso:GetApplicationInstance
+                     - sso:GetApplicationTemplate
+                     - sso:GetManagedApplicationInstance
+                     - sso:GetMfaDeviceManagementForDirectory
+                     - sso:GetPermissionSet
+                     - sso:GetProfile
+                     - sso:GetSharedSsoConfiguration
+                     - sso:GetSsoConfiguration
+                     - sso:GetSSOStatus
+                     - sso:GetTrust
+                     - sso:ListApplicationInstanceCertificates
+                     - sso:ListApplicationInstances
+                     - sso:ListApplications
+                     - sso:ListApplicationTemplates
+                     - sso:ListDirectoryAssociations
+                     - sso:ListInstances
+                     - sso:ListProfileAssociations
+                     - sso:ListProfiles
+                     - identitystore:ListGroups
+                     - identitystore:ListGroupMemberships
+                     - identitystore:ListUsers
+                   Resource: '*'
            - PolicyName: AllowEKSIdentityRead
              PolicyDocument:
                Version: '2012-10-17'
@@ -91,6 +176,13 @@ Deploys the role into every existing and future account in the organization. Ser
                      - eks:ListIdentityProviderConfigs
                      - eks:DescribeIdentityProviderConfig
                    Resource: '*'
+           - PolicyName: AllowPublicSSMParameterRead
+             PolicyDocument:
+               Version: '2012-10-17'
+               Statement:
+                 - Effect: Allow
+                   Action: ssm:GetParametersByPath
+                   Resource: !Sub 'arn:${AWS::Partition}:ssm:*::parameter/aws/service/*'
            - PolicyName: AllowECRRead
              PolicyDocument:
                Version: '2012-10-17'
@@ -102,30 +194,20 @@ Deploys the role into every existing and future account in the organization. Ser
                      - ecr:GetDownloadUrlForLayer
                      - ecr:BatchGetImage
                    Resource: '*'
-           - PolicyName: AllowPublicSSMParameterRead
-             PolicyDocument:
-               Version: '2012-10-17'
-               Statement:
-                 - Effect: Allow
-                   Action: ssm:GetParametersByPath
-                   Resource: !Sub 'arn:${AWS::Partition}:ssm:*::parameter/aws/service/*'
-           - PolicyName: AllowSSORead
+           - PolicyName: AllowGlueInspectorRead
              PolicyDocument:
                Version: '2012-10-17'
                Statement:
                  - Effect: Allow
                    Action:
-                     - sso:Describe*
-                     - sso:Get*
-                     - sso:List*
+                     - glue:GetConnections
+                     - inspector2:ListMembers
                    Resource: '*'
    Outputs:
      SubImageScanRoleArn:
        Description: ARN of the created SubImage scanning IAM Role.
        Value: !GetAtt SubImageScanRole.Arn
    ```
-
-   The full per-action SSO list is also valid; the wildcard form above is functionally equivalent for read-only and easier to maintain. If your organization disallows wildcard SSO actions, use the explicit list at https://app.subimage.io/docs/modules/aws.
 
 2. Create the StackSet with service-managed permissions:
 
@@ -186,6 +268,97 @@ resource "aws_iam_role_policy_attachment" "subimage_security_audit" {
   policy_arn = "arn:aws:iam::aws:policy/SecurityAudit"
 }
 
+resource "aws_iam_role_policy" "subimage_sso_resource_specific_actions" {
+  name = "AllowSSOResourceSpecificActions"
+  role = aws_iam_role.subimage_scan_role.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "sso:DescribeAccountAssignmentCreationStatus",
+        "sso:DescribeAccountAssignmentDeletionStatus",
+        "sso:DescribeApplication",
+        "sso:DescribeApplicationAssignment",
+        "sso:DescribeApplicationProvider",
+        "sso:DescribeInstance",
+        "sso:DescribeInstanceAccessControlAttributeConfiguration",
+        "sso:DescribePermissionSet",
+        "sso:DescribePermissionSetProvisioningStatus",
+        "sso:DescribeTrustedTokenIssuer",
+        "sso:GetApplicationAccessScope",
+        "sso:GetApplicationAssignmentConfiguration",
+        "sso:GetApplicationAuthenticationMethod",
+        "sso:GetApplicationGrant",
+        "sso:GetInlinePolicyForPermissionSet",
+        "sso:GetPermissionsBoundaryForPermissionSet",
+        "sso:ListAccountAssignmentCreationStatus",
+        "sso:ListAccountAssignmentDeletionStatus",
+        "sso:ListAccountAssignments",
+        "sso:ListAccountAssignmentsForPrincipal",
+        "sso:ListAccountsForProvisionedPermissionSet",
+        "sso:ListApplicationAccessScopes",
+        "sso:ListApplicationAssignments",
+        "sso:ListApplicationAssignmentsForPrincipal",
+        "sso:ListApplicationAuthenticationMethods",
+        "sso:ListApplicationGrants",
+        "sso:ListApplicationProviders",
+        "sso:ListCustomerManagedPolicyReferencesInPermissionSet",
+        "sso:ListManagedPoliciesInPermissionSet",
+        "sso:ListPermissionSetProvisioningStatus",
+        "sso:ListPermissionSets",
+        "sso:ListPermissionSetsProvisionedToAccount",
+        "sso:ListTagsForResource",
+        "sso:ListTrustedTokenIssuers",
+      ]
+      Resource = [
+        "arn:aws:sso::*:application/*/*",
+        "arn:aws:sso::*:trustedTokenIssuer/*/*",
+        "arn:aws:sso:::account/*",
+        "arn:aws:sso:::instance/*",
+        "arn:aws:sso:::permissionSet/*/*",
+        "arn:aws:sso::aws:applicationProvider/*",
+      ]
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "subimage_sso_global_actions" {
+  name = "AllowSSOGlobalActions"
+  role = aws_iam_role.subimage_scan_role.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "sso:DescribeRegisteredRegions",
+        "sso:GetApplicationInstance",
+        "sso:GetApplicationTemplate",
+        "sso:GetManagedApplicationInstance",
+        "sso:GetMfaDeviceManagementForDirectory",
+        "sso:GetPermissionSet",
+        "sso:GetProfile",
+        "sso:GetSharedSsoConfiguration",
+        "sso:GetSsoConfiguration",
+        "sso:GetSSOStatus",
+        "sso:GetTrust",
+        "sso:ListApplicationInstanceCertificates",
+        "sso:ListApplicationInstances",
+        "sso:ListApplications",
+        "sso:ListApplicationTemplates",
+        "sso:ListDirectoryAssociations",
+        "sso:ListInstances",
+        "sso:ListProfileAssociations",
+        "sso:ListProfiles",
+        "identitystore:ListGroups",
+        "identitystore:ListGroupMemberships",
+        "identitystore:ListUsers",
+      ]
+      Resource = "*"
+    }]
+  })
+}
+
 resource "aws_iam_role_policy" "subimage_eks_identity_read" {
   name = "AllowEKSIdentityRead"
   role = aws_iam_role.subimage_scan_role.id
@@ -199,6 +372,21 @@ resource "aws_iam_role_policy" "subimage_eks_identity_read" {
         "eks:DescribeIdentityProviderConfig",
       ]
       Resource = "*"
+    }]
+  })
+}
+
+data "aws_partition" "current" {}
+
+resource "aws_iam_role_policy" "subimage_public_ssm_parameter_read" {
+  name = "AllowPublicSSMParameterRead"
+  role = aws_iam_role.subimage_scan_role.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = "ssm:GetParametersByPath"
+      Resource = "arn:${data.aws_partition.current.partition}:ssm:*::parameter/aws/service/*"
     }]
   })
 }
@@ -221,32 +409,16 @@ resource "aws_iam_role_policy" "subimage_ecr_read" {
   })
 }
 
-data "aws_partition" "current" {}
-
-resource "aws_iam_role_policy" "subimage_public_ssm_parameter_read" {
-  name = "AllowPublicSSMParameterRead"
-  role = aws_iam_role.subimage_scan_role.id
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = "ssm:GetParametersByPath"
-      Resource = "arn:${data.aws_partition.current.partition}:ssm:*::parameter/aws/service/*"
-    }]
-  })
-}
-
-resource "aws_iam_role_policy" "subimage_sso_read" {
-  name = "AllowSSORead"
+resource "aws_iam_role_policy" "subimage_glue_inspector_read" {
+  name = "AllowGlueInspectorRead"
   role = aws_iam_role.subimage_scan_role.id
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
       Effect = "Allow"
       Action = [
-        "sso:Describe*",
-        "sso:Get*",
-        "sso:List*",
+        "glue:GetConnections",
+        "inspector2:ListMembers",
       ]
       Resource = "*"
     }]
@@ -292,15 +464,109 @@ aws iam attach-role-policy \
   --role-name SubImageScanRole \
   --policy-arn arn:aws:iam::aws:policy/SecurityAudit
 
+SSO_RESOURCE_SPECIFIC_POLICY=$(cat <<EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Action": [
+      "sso:DescribeAccountAssignmentCreationStatus",
+      "sso:DescribeAccountAssignmentDeletionStatus",
+      "sso:DescribeApplication",
+      "sso:DescribeApplicationAssignment",
+      "sso:DescribeApplicationProvider",
+      "sso:DescribeInstance",
+      "sso:DescribeInstanceAccessControlAttributeConfiguration",
+      "sso:DescribePermissionSet",
+      "sso:DescribePermissionSetProvisioningStatus",
+      "sso:DescribeTrustedTokenIssuer",
+      "sso:GetApplicationAccessScope",
+      "sso:GetApplicationAssignmentConfiguration",
+      "sso:GetApplicationAuthenticationMethod",
+      "sso:GetApplicationGrant",
+      "sso:GetInlinePolicyForPermissionSet",
+      "sso:GetPermissionsBoundaryForPermissionSet",
+      "sso:ListAccountAssignmentCreationStatus",
+      "sso:ListAccountAssignmentDeletionStatus",
+      "sso:ListAccountAssignments",
+      "sso:ListAccountAssignmentsForPrincipal",
+      "sso:ListAccountsForProvisionedPermissionSet",
+      "sso:ListApplicationAccessScopes",
+      "sso:ListApplicationAssignments",
+      "sso:ListApplicationAssignmentsForPrincipal",
+      "sso:ListApplicationAuthenticationMethods",
+      "sso:ListApplicationGrants",
+      "sso:ListApplicationProviders",
+      "sso:ListCustomerManagedPolicyReferencesInPermissionSet",
+      "sso:ListManagedPoliciesInPermissionSet",
+      "sso:ListPermissionSetProvisioningStatus",
+      "sso:ListPermissionSets",
+      "sso:ListPermissionSetsProvisionedToAccount",
+      "sso:ListTagsForResource",
+      "sso:ListTrustedTokenIssuers"
+    ],
+    "Resource": [
+      "arn:aws:sso::*:application/*/*",
+      "arn:aws:sso::*:trustedTokenIssuer/*/*",
+      "arn:aws:sso:::account/*",
+      "arn:aws:sso:::instance/*",
+      "arn:aws:sso:::permissionSet/*/*",
+      "arn:aws:sso::aws:applicationProvider/*"
+    ]
+  }]
+}
+EOF
+)
+
+aws iam put-role-policy \
+  --role-name SubImageScanRole \
+  --policy-name AllowSSOResourceSpecificActions \
+  --policy-document "$SSO_RESOURCE_SPECIFIC_POLICY"
+
+SSO_GLOBAL_POLICY=$(cat <<EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Action": [
+      "sso:DescribeRegisteredRegions",
+      "sso:GetApplicationInstance",
+      "sso:GetApplicationTemplate",
+      "sso:GetManagedApplicationInstance",
+      "sso:GetMfaDeviceManagementForDirectory",
+      "sso:GetPermissionSet",
+      "sso:GetProfile",
+      "sso:GetSharedSsoConfiguration",
+      "sso:GetSsoConfiguration",
+      "sso:GetSSOStatus",
+      "sso:GetTrust",
+      "sso:ListApplicationInstanceCertificates",
+      "sso:ListApplicationInstances",
+      "sso:ListApplications",
+      "sso:ListApplicationTemplates",
+      "sso:ListDirectoryAssociations",
+      "sso:ListInstances",
+      "sso:ListProfileAssociations",
+      "sso:ListProfiles",
+      "identitystore:ListGroups",
+      "identitystore:ListGroupMemberships",
+      "identitystore:ListUsers"
+    ],
+    "Resource": "*"
+  }]
+}
+EOF
+)
+
+aws iam put-role-policy \
+  --role-name SubImageScanRole \
+  --policy-name AllowSSOGlobalActions \
+  --policy-document "$SSO_GLOBAL_POLICY"
+
 aws iam put-role-policy \
   --role-name SubImageScanRole \
   --policy-name AllowEKSIdentityRead \
   --policy-document '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["eks:DescribeAccessEntry","eks:ListIdentityProviderConfigs","eks:DescribeIdentityProviderConfig"],"Resource":"*"}]}'
-
-aws iam put-role-policy \
-  --role-name SubImageScanRole \
-  --policy-name AllowECRRead \
-  --policy-document '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["ecr:GetAuthorizationToken","ecr:BatchCheckLayerAvailability","ecr:GetDownloadUrlForLayer","ecr:BatchGetImage"],"Resource":"*"}]}'
 
 AWS_PARTITION=$(aws sts get-caller-identity --query Arn --output text | cut -d: -f2)
 
@@ -311,8 +577,21 @@ aws iam put-role-policy \
 
 aws iam put-role-policy \
   --role-name SubImageScanRole \
-  --policy-name AllowSSORead \
-  --policy-document '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["sso:Describe*","sso:Get*","sso:List*"],"Resource":"*"}]}'
+  --policy-name AllowECRRead \
+  --policy-document '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["ecr:GetAuthorizationToken","ecr:BatchCheckLayerAvailability","ecr:GetDownloadUrlForLayer","ecr:BatchGetImage"],"Resource":"*"}]}'
+
+aws iam put-role-policy \
+  --role-name SubImageScanRole \
+  --policy-name AllowGlueInspectorRead \
+  --policy-document '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["glue:GetConnections","inspector2:ListMembers"],"Resource":"*"}]}'
+```
+
+**Updating a role created by an earlier version of this skill:** run every command above except `create-role`, since the role already exists. `put-role-policy` overwrites a policy by name but never removes one, so delete the retired SSO wildcard policy after the new SSO policies are in place:
+
+```bash
+aws iam delete-role-policy \
+  --role-name SubImageScanRole \
+  --policy-name AllowSSORead
 ```
 
 ## Register the accounts in SubImage
@@ -347,6 +626,7 @@ Look for `aws` with `status: synced` and a recent `lastSyncEndedAt`.
 - **`AccessDenied` on `sts:AssumeRole`**: trust policy does not list the SubImage principal ARN, or you copied a placeholder literal. Re-run path A/B/C with the substituted `<TENANT_ACCOUNT_ID>` / `<TENANT_ID>`.
 - **`AccessDenied` on a service action**: managed policy missing or inline policy missing. Confirm `SecurityAudit` is attached and the inline policies above are present.
 - **`AccessDenied` on `ssm:GetParametersByPath`**: add or update `AllowPublicSSMParameterRead`. If the AWS module uses public parameter prefixes outside `/aws/service/...`, scope the policy to those exact accountless parameter ARNs too.
+- **`AccessDenied` on `glue:GetConnections` or `inspector2:ListMembers`**: the role is missing `AllowGlueInspectorRead`, usually because it was deployed from an older copy of this skill. Add it through the same path you deployed with.
 - **Management account missing from scans, StackSet otherwise healthy**: expected. Service-managed StackSets skip the management account; deploy the standalone stack there.
 
 ## References
