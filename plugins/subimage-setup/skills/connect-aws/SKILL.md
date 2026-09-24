@@ -365,6 +365,18 @@ aws iam put-role-policy \
   --policy-document '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["ses:ListEmailIdentities"],"Resource":"*"}]}'
 ```
 
+**Updating a role created with an earlier version of this path.** Skip `create-role` and rerun the `put-role-policy` commands above. `put-role-policy` only adds or replaces the named policy, so the old `AllowSSORead` wildcard policy stays attached until you delete it:
+
+```bash
+aws iam delete-role-policy \
+  --role-name SubImageScanRole \
+  --policy-name AllowSSORead
+
+aws iam list-role-policies --role-name SubImageScanRole
+```
+
+`delete-role-policy` returns `NoSuchEntity` if the policy is already gone. The listing should show exactly `AllowEKSIdentityRead`, `AllowECRRead`, `AllowPublicSSMParameterRead`, `AllowSSOGlobalActions`, `AllowGlueInspectorRead`, and `AllowSESRead`. If the role is managed by CloudFormation or Terraform, update it through Path A or B instead; both remove renamed policies automatically, and deleting a policy those tools own by hand causes drift.
+
 ## Register the accounts in SubImage
 
 After the role exists, the user must add the accounts to the AWS module:
