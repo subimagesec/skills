@@ -40,16 +40,16 @@ arn:aws:iam::<TENANT_ACCOUNT_ID>:role/<TENANT_ID>-subimage-readonly
 `SubImageScanRole` needs:
 
 - AWS managed policy `arn:aws:iam::aws:policy/SecurityAudit`
-- Inline policies for SSO read, EKS identity read, public SSM parameter read, and ECR read (full JSON in every path below)
+- Inline policies for SSO permission set read, EKS identity provider read, public SSM parameter read, ECR read, Glue and Inspector read, and SES read (full JSON in every path below)
 
-`SecurityAudit` already covers most discovery actions including `eks:DescribeCluster` and `eks:ListAccessEntries`. The inline additions cover SSO assignments, EKS identity provider configs, AWS-managed public SSM parameters, and ECR image pulls used by the image scanner.
+`SecurityAudit` already covers most discovery actions, including `eks:DescribeCluster`, `eks:ListAccessEntries`, `eks:DescribeAccessEntry`, and the Identity Center and Identity Store list and describe calls. The inline additions cover only what it omits: `sso:GetPermissionSet` (AWS also evaluates it for `DescribePermissionSet`), EKS identity provider configs, AWS-managed public SSM parameters, ECR image pulls used by the image scanner, ECR pull through cache rules, Glue connections, Inspector members, and SES email identities.
 
 ## Gotchas
 
 Read these before generating any commands; they correct the most common wrong assumptions.
 
 - **Service-managed StackSets skip the management account.** Targeting the org root is not enough. Deploy a standalone stack on the management account separately if you want it scanned.
-- **`SecurityAudit` is broad but not complete.** It covers `eks:DescribeCluster` and `eks:ListAccessEntries`. The inline `AllowEKSIdentityRead` adds only the three actions that are missing (`DescribeAccessEntry`, `ListIdentityProviderConfigs`, `DescribeIdentityProviderConfig`). Do not duplicate or you make the policy harder to audit.
+- **`SecurityAudit` is broad but not complete.** It covers `eks:DescribeCluster`, `eks:ListAccessEntries`, `eks:DescribeAccessEntry`, and the Identity Center list and describe calls. The inline policies add only actions it omits, such as `eks:ListIdentityProviderConfigs`, `eks:DescribeIdentityProviderConfig`, and `sso:GetPermissionSet`. Do not duplicate `SecurityAudit` actions or widen the SSO policy to `sso:*` wildcards; both make the policy harder to audit.
 - **Public SSM parameter reads need an explicit permission.** `SecurityAudit` does not include `ssm:GetParametersByPath`. Scope `AllowPublicSSMParameterRead` to the accountless `/aws/service/...` public parameter hierarchy so SubImage can ingest its default Bottlerocket and EKS optimized AMI recommendation paths.
 - **Principal ARN format is non-obvious.** It is `arn:aws:iam::<TENANT_ACCOUNT_ID>:role/<TENANT_ID>-subimage-readonly`. The role name is `<TENANT_ID>-subimage-readonly`, NOT `subimage-readonly` or `<tenant>-readonly`. Copying the wrong form means the trust policy passes `terraform plan` but every sync fails with `AccessDenied`.
 - **Service-managed StackSets need org-level prerequisites.** AWS Organizations must be set up with all-features enabled and trusted access for CloudFormation StackSets. If `create-stack-set --permission-model SERVICE_MANAGED` fails with "trusted access is not enabled", run `aws organizations enable-aws-service-access --service-principal=stacksets.cloudformation.amazonaws.com` first.
@@ -87,7 +87,6 @@ Deploys the role into every existing and future account in the organization. Ser
                Statement:
                  - Effect: Allow
                    Action:
-                     - eks:DescribeAccessEntry
                      - eks:ListIdentityProviderConfigs
                      - eks:DescribeIdentityProviderConfig
                    Resource: '*'
@@ -101,6 +100,7 @@ Deploys the role into every existing and future account in the organization. Ser
                      - ecr:BatchCheckLayerAvailability
                      - ecr:GetDownloadUrlForLayer
                      - ecr:BatchGetImage
+                     - ecr:DescribePullThroughCacheRules
                    Resource: '*'
            - PolicyName: AllowPublicSSMParameterRead
              PolicyDocument:
@@ -109,15 +109,30 @@ Deploys the role into every existing and future account in the organization. Ser
                  - Effect: Allow
                    Action: ssm:GetParametersByPath
                    Resource: !Sub 'arn:${AWS::Partition}:ssm:*::parameter/aws/service/*'
-           - PolicyName: AllowSSORead
+           - PolicyName: AllowSSOGlobalActions
              PolicyDocument:
                Version: '2012-10-17'
                Statement:
                  - Effect: Allow
                    Action:
-                     - sso:Describe*
-                     - sso:Get*
-                     - sso:List*
+                     - sso:GetPermissionSet
+                   Resource: '*'
+           - PolicyName: AllowGlueInspectorRead
+             PolicyDocument:
+               Version: '2012-10-17'
+               Statement:
+                 - Effect: Allow
+                   Action:
+                     - glue:GetConnections
+                     - inspector2:ListMembers
+                   Resource: '*'
+           - PolicyName: AllowSESRead
+             PolicyDocument:
+               Version: '2012-10-17'
+               Statement:
+                 - Effect: Allow
+                   Action:
+                     - ses:ListEmailIdentities
                    Resource: '*'
    Outputs:
      SubImageScanRoleArn:
@@ -125,7 +140,7 @@ Deploys the role into every existing and future account in the organization. Ser
        Value: !GetAtt SubImageScanRole.Arn
    ```
 
-   The full per-action SSO list is also valid; the wildcard form above is functionally equivalent for read-only and easier to maintain. If your organization disallows wildcard SSO actions, use the explicit list at https://app.subimage.io/docs/modules/aws.
+   This matches the canonical template at https://app.subimage.io/docs/modules/aws. Every inline policy grants only read actions that `SecurityAudit` omits, so do not add actions that `SecurityAudit` already covers.
 
 2. Create the StackSet with service-managed permissions:
 
@@ -194,7 +209,6 @@ resource "aws_iam_role_policy" "subimage_eks_identity_read" {
     Statement = [{
       Effect = "Allow"
       Action = [
-        "eks:DescribeAccessEntry",
         "eks:ListIdentityProviderConfigs",
         "eks:DescribeIdentityProviderConfig",
       ]
@@ -215,6 +229,7 @@ resource "aws_iam_role_policy" "subimage_ecr_read" {
         "ecr:BatchCheckLayerAvailability",
         "ecr:GetDownloadUrlForLayer",
         "ecr:BatchGetImage",
+        "ecr:DescribePullThroughCacheRules",
       ]
       Resource = "*"
     }]
@@ -236,18 +251,43 @@ resource "aws_iam_role_policy" "subimage_public_ssm_parameter_read" {
   })
 }
 
-resource "aws_iam_role_policy" "subimage_sso_read" {
-  name = "AllowSSORead"
+resource "aws_iam_role_policy" "subimage_sso_global_actions" {
+  name = "AllowSSOGlobalActions"
+  role = aws_iam_role.subimage_scan_role.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["sso:GetPermissionSet"]
+      Resource = "*"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "subimage_glue_inspector_read" {
+  name = "AllowGlueInspectorRead"
   role = aws_iam_role.subimage_scan_role.id
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
       Effect = "Allow"
       Action = [
-        "sso:Describe*",
-        "sso:Get*",
-        "sso:List*",
+        "glue:GetConnections",
+        "inspector2:ListMembers",
       ]
+      Resource = "*"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "subimage_ses_read" {
+  name = "AllowSESRead"
+  role = aws_iam_role.subimage_scan_role.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["ses:ListEmailIdentities"]
       Resource = "*"
     }]
   })
@@ -295,12 +335,12 @@ aws iam attach-role-policy \
 aws iam put-role-policy \
   --role-name SubImageScanRole \
   --policy-name AllowEKSIdentityRead \
-  --policy-document '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["eks:DescribeAccessEntry","eks:ListIdentityProviderConfigs","eks:DescribeIdentityProviderConfig"],"Resource":"*"}]}'
+  --policy-document '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["eks:ListIdentityProviderConfigs","eks:DescribeIdentityProviderConfig"],"Resource":"*"}]}'
 
 aws iam put-role-policy \
   --role-name SubImageScanRole \
   --policy-name AllowECRRead \
-  --policy-document '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["ecr:GetAuthorizationToken","ecr:BatchCheckLayerAvailability","ecr:GetDownloadUrlForLayer","ecr:BatchGetImage"],"Resource":"*"}]}'
+  --policy-document '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["ecr:GetAuthorizationToken","ecr:BatchCheckLayerAvailability","ecr:GetDownloadUrlForLayer","ecr:BatchGetImage","ecr:DescribePullThroughCacheRules"],"Resource":"*"}]}'
 
 AWS_PARTITION=$(aws sts get-caller-identity --query Arn --output text | cut -d: -f2)
 
@@ -311,8 +351,18 @@ aws iam put-role-policy \
 
 aws iam put-role-policy \
   --role-name SubImageScanRole \
-  --policy-name AllowSSORead \
-  --policy-document '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["sso:Describe*","sso:Get*","sso:List*"],"Resource":"*"}]}'
+  --policy-name AllowSSOGlobalActions \
+  --policy-document '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["sso:GetPermissionSet"],"Resource":"*"}]}'
+
+aws iam put-role-policy \
+  --role-name SubImageScanRole \
+  --policy-name AllowGlueInspectorRead \
+  --policy-document '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["glue:GetConnections","inspector2:ListMembers"],"Resource":"*"}]}'
+
+aws iam put-role-policy \
+  --role-name SubImageScanRole \
+  --policy-name AllowSESRead \
+  --policy-document '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["ses:ListEmailIdentities"],"Resource":"*"}]}'
 ```
 
 ## Register the accounts in SubImage
