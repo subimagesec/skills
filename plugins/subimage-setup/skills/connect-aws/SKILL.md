@@ -365,7 +365,7 @@ aws iam put-role-policy \
   --policy-document '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["ses:ListEmailIdentities"],"Resource":"*"}]}'
 ```
 
-**Updating a role created with an earlier version of this path.** Skip `create-role` and rerun the `put-role-policy` commands above. `put-role-policy` only adds or replaces the named policy, so the old `AllowSSORead` wildcard policy stays attached until you delete it:
+**Updating a role created with an earlier version of this path.** Skip `create-role` and rerun everything else in the block above, including the `AWS_PARTITION` assignment that the `AllowPublicSSMParameterRead` document depends on. `put-role-policy` only adds or replaces the named policy, so the old `AllowSSORead` wildcard policy stays attached until you delete it:
 
 ```bash
 aws iam delete-role-policy \
