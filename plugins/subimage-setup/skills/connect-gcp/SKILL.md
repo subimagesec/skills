@@ -30,7 +30,7 @@ Before generating commands or HCL, collect these values. **If any are missing, a
 | `<TENANT_ID>` | SubImage tenant slug. Same setup docs table; also appears in `<TENANT_ID>-subimage-readonly`. | "What is your SubImage tenant ID? It is the slug used in `<TENANT_ID>-subimage-readonly`." |
 | Coverage scope | Org root, a folder, or a single project. | "Should SubImage cover the entire organization, a specific folder, or one project?" |
 | GAR scanning | Whether SubImage should scan images in Google Artifact Registry. | "Should SubImage scan container images stored in Google Artifact Registry? If yes, which projects or repositories contain them?" |
-| Optional roles | Whether to include `cloudasset.viewer`, `bigquery.dataViewer`, `bigquery.connectionUser`, `cloudsql.viewer`, `notebooks.viewer`, or `run.viewer`. | "Do you want optional coverage for Cloud Asset Inventory policy bindings, BigQuery, Cloud SQL, Notebooks, or Cloud Run? Default: only the three required roles." |
+| Optional roles | Whether to include `bigquery.dataViewer`, `bigquery.connectionUser`, `cloudsql.viewer`, `notebooks.viewer`, or `serviceusage.apiKeysViewer`. | "Do you want optional coverage for BigQuery, Cloud SQL, Notebooks, or API keys? Default: only the six required roles." |
 | Path choice | Terraform or `gcloud`. | "Which path: Terraform (recommended for IaC repos) or `gcloud` (one-off setup)?" |
 
 Suggested IDs:
@@ -48,16 +48,18 @@ Grant these roles to the WIF principal at the organization level, folder level, 
 | Role | Purpose |
 |---|---|
 | `roles/iam.securityReviewer` | Read IAM policies, relationships, and Workload Identity Federation pools/providers. If the user substitutes a custom role, it must include `iam.workloadIdentityPools.list` and `iam.workloadIdentityPoolProviders.list`, or they must also grant `roles/iam.workloadIdentityPoolViewer`. |
+| `roles/compute.viewer` | Compute Engine inventory, including instances, networking, SSL policies, and target proxies. |
 | `roles/resourcemanager.organizationViewer` | Discover the organization, projects, and folders. |
 | `roles/resourcemanager.folderViewer` | Enumerate folder hierarchy. |
+| `roles/cloudasset.viewer` | Effective IAM policy bindings and IAM fallback when a target project's IAM API is disabled. Attack paths and IAM permission analysis depend on it. |
+| `roles/run.viewer` | Cloud Run services, jobs, executions, and revisions. Revisions hold the image digest behind a service deployed by tag, which SubImage needs to link the service to its image for scanning and vulnerability action items. |
 
 Optional roles:
 
 | Role | Adds |
 |---|---|
-| `roles/cloudasset.viewer` | Effective IAM policy bindings and IAM fallback when a target project's IAM API is disabled. |
-| `roles/run.viewer` | Cloud Run services, jobs, and executions. |
 | `roles/notebooks.viewer` | Vertex AI Workbench resources. |
+| `roles/serviceusage.apiKeysViewer` | GCP API keys from `apikeys.googleapis.com`. |
 | `roles/cloudsql.viewer` | Cloud SQL instances, databases, and users. |
 | `roles/bigquery.dataViewer` | BigQuery datasets and tables. |
 | `roles/bigquery.connectionUser` | BigQuery connection resources. |
@@ -71,6 +73,8 @@ Read these before generating commands; they correct the most common wrong assump
 - **Bind roles to the WIF principal itself.** The principal must be `principalSet://iam.googleapis.com/projects/<HOST_PROJECT_NUMBER>/locations/global/workloadIdentityPools/<POOL_ID>/attribute.aws_role/arn:aws:sts::<TENANT_ACCOUNT_ID>:assumed-role/<TENANT_ID>-subimage-readonly`.
 - **Token exchange success is not enough.** STS can issue a Google token while GCP APIs still return `PERMISSION_DENIED` if the IAM roles were granted to a service account, the wrong pool, the wrong host project number, or the wrong principal attribute.
 - **AWS role ARN vs assumed-role ARN differ.** The AWS IAM role is `arn:aws:iam::<TENANT_ACCOUNT_ID>:role/<TENANT_ID>-subimage-readonly`. The WIF principal uses the STS assumed-role form: `arn:aws:sts::<TENANT_ACCOUNT_ID>:assumed-role/<TENANT_ID>-subimage-readonly`.
+- **Policy bindings need the API and the role.** `roles/cloudasset.viewer` does nothing unless `cloudasset.googleapis.com` is enabled on the host project. Without both, the GCP sync finishes as Degraded and GCP attack paths never appear.
+- **Cloud Run needs `run.revisions.get`.** Listing services works with narrower roles, but a service deployed by tag only exposes its image digest on the revision. Without `roles/run.viewer`, the sync logs `Permission 'run.revisions.get' denied` warnings and those services are never scanned.
 - **GAR image scanning needs Artifact Registry access.** If the user wants vulnerability/SBOM scanning for GAR images, grant `roles/artifactregistry.reader` on the relevant repositories or projects. Organization scope is easiest but broader than necessary.
 - **Sync calls bill against the host project.** Enable APIs on the host project that owns the pool/provider. Optional API gaps do not break the whole sync; SubImage logs warnings and skips those collectors.
 - **Selective sync has hidden dependencies.** `policy_bindings` depends on `iam`. `permission_relationships` depends on both `iam` and `policy_bindings`. `bigquery_connection` depends on `bigquery`.
@@ -91,7 +95,7 @@ variable "subimage_tenant_id" { type = string }
 variable "subimage_optional_roles" {
   type    = list(string)
   default = []
-  # Example: ["roles/cloudasset.viewer", "roles/run.viewer"]
+  # Example: ["roles/cloudsql.viewer", "roles/bigquery.dataViewer"]
 }
 
 data "google_project" "host" {
@@ -134,8 +138,11 @@ resource "google_iam_workload_identity_pool_provider" "subimage_aws" {
 locals {
   required_roles = [
     "roles/iam.securityReviewer",
+    "roles/compute.viewer",
     "roles/resourcemanager.organizationViewer",
     "roles/resourcemanager.folderViewer",
+    "roles/cloudasset.viewer",
+    "roles/run.viewer",
   ]
   all_roles = concat(local.required_roles, var.subimage_optional_roles)
 }
@@ -153,6 +160,8 @@ resource "google_project_service" "core" {
     "serviceusage.googleapis.com",
     "iam.googleapis.com",
     "sts.googleapis.com",
+    "cloudasset.googleapis.com",
+    "run.googleapis.com",
   ])
   project            = var.subimage_host_project
   service            = each.key
@@ -208,6 +217,8 @@ gcloud services enable \
   serviceusage.googleapis.com \
   iam.googleapis.com \
   sts.googleapis.com \
+  cloudasset.googleapis.com \
+  run.googleapis.com \
   --project="$HOST_PROJECT"
 
 gcloud iam workload-identity-pools create "$POOL_ID" \
@@ -225,8 +236,11 @@ gcloud iam workload-identity-pools providers create-aws "$PROVIDER_ID" \
 
 for ROLE in \
     roles/iam.securityReviewer \
+    roles/compute.viewer \
     roles/resourcemanager.organizationViewer \
-    roles/resourcemanager.folderViewer; do
+    roles/resourcemanager.folderViewer \
+    roles/cloudasset.viewer \
+    roles/run.viewer; do
   gcloud organizations add-iam-policy-binding "$ORG_ID" \
     --member="$SUBIMAGE_WIF_MEMBER" \
     --role="$ROLE"
@@ -265,15 +279,14 @@ gcloud services enable dns.googleapis.com --project="$HOST_PROJECT"
 gcloud services enable cloudkms.googleapis.com --project="$HOST_PROJECT"
 gcloud services enable bigtableadmin.googleapis.com --project="$HOST_PROJECT"
 gcloud services enable sqladmin.googleapis.com --project="$HOST_PROJECT"
-gcloud services enable cloudasset.googleapis.com --project="$HOST_PROJECT"
 gcloud services enable cloudfunctions.googleapis.com --project="$HOST_PROJECT"
-gcloud services enable run.googleapis.com --project="$HOST_PROJECT"
 gcloud services enable secretmanager.googleapis.com --project="$HOST_PROJECT"
 gcloud services enable artifactregistry.googleapis.com --project="$HOST_PROJECT"
 gcloud services enable aiplatform.googleapis.com --project="$HOST_PROJECT"
 gcloud services enable notebooks.googleapis.com --project="$HOST_PROJECT"
 gcloud services enable bigquery.googleapis.com --project="$HOST_PROJECT"
 gcloud services enable bigqueryconnection.googleapis.com --project="$HOST_PROJECT"
+gcloud services enable apikeys.googleapis.com --project="$HOST_PROJECT"
 ```
 
 ## Register the module in SubImage
@@ -311,8 +324,11 @@ SA_EMAIL="subimage-org-inventory@${HOST_PROJECT}.iam.gserviceaccount.com"
 
 for ROLE in \
     roles/iam.securityReviewer \
+    roles/compute.viewer \
     roles/resourcemanager.organizationViewer \
-    roles/resourcemanager.folderViewer; do
+    roles/resourcemanager.folderViewer \
+    roles/cloudasset.viewer \
+    roles/run.viewer; do
   gcloud organizations add-iam-policy-binding "$ORG_ID" \
     --member="serviceAccount:${SA_EMAIL}" \
     --role="$ROLE"
@@ -364,6 +380,8 @@ Look for `gcp` with `status: synced`. If the sync fails with GCP API `PERMISSION
 - **STS token exchange succeeds but GCP APIs return `PERMISSION_DENIED`**: roles were likely bound to the wrong principal. Bind the required roles to the `principalSet://.../attribute.aws_role/arn:aws:sts::<TENANT_ACCOUNT_ID>:assumed-role/<TENANT_ID>-subimage-readonly` member.
 - **`PERMISSION_DENIED` on `cloudresourcemanager.organizations.get`**: missing `roles/resourcemanager.organizationViewer` at the chosen scope.
 - **WIF provider rejects the AWS identity**: check `aws.account_id`, `attribute_condition`, `<TENANT_ACCOUNT_ID>`, `<TENANT_ID>`, and that `sts.googleapis.com` is enabled on the host project.
+- **GCP sync finishes as Degraded for policy bindings**: enable `cloudasset.googleapis.com` on the host project and grant `roles/cloudasset.viewer` at the organization level.
+- **`Permission 'run.revisions.get' denied` in sync logs**: grant `roles/run.viewer`; Cloud Run services deployed by tag cannot be linked to their images without it.
 - **GAR image scanning fails**: grant `roles/artifactregistry.reader` on the specific repositories or projects that contain images.
 - **Sync logs say "API disabled"**: enable the corresponding API on the host project, or leave it disabled if the user does not need that collector.
 - **Selective sync surprise**: `policy_bindings` depends on `iam`; `permission_relationships` depends on both `iam` and `policy_bindings`; `bigquery_connection` depends on `bigquery`.
