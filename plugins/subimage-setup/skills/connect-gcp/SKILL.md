@@ -76,9 +76,9 @@ Read these before generating commands; they correct the most common wrong assump
 - **Policy bindings need the API and the role.** `roles/cloudasset.viewer` does nothing unless `cloudasset.googleapis.com` is enabled on the host project. Without both, the GCP sync finishes as Degraded and GCP attack paths never appear.
 - **Cloud Run needs `run.revisions.get`.** Listing services works with narrower roles, but a service deployed by tag only exposes its image digest on the revision. Without `roles/run.viewer`, the sync logs `Permission 'run.revisions.get' denied` warnings and those services are never scanned.
 - **GAR image scanning needs Artifact Registry access.** If the user wants vulnerability/SBOM scanning for GAR images, grant `roles/artifactregistry.reader` on the relevant repositories or projects. Organization scope is easiest but broader than necessary.
-- **Sync calls bill against the host project.** Enable APIs on the host project that owns the pool/provider. Optional API gaps do not break the whole sync; SubImage logs warnings and skips those collectors.
+- **Host project APIs and resource APIs are enabled in different places.** Discovery, STS, and Cloud Asset Inventory calls are charged to the host project that owns the pool/provider, so enable `cloudresourcemanager`, `serviceusage`, `iam`, `sts`, and `cloudasset` there. Every other collector (Compute, Cloud Run, GKE, API keys, and so on) runs only in scanned projects where that resource's API is enabled *in that project*. Enabling a resource API on the host project covers only the host project's own resources. Projects that run a service already have its API enabled, so do not tell the user to enable resource APIs on the host project to get org-wide coverage. A disabled resource API does not break the sync; SubImage skips that resource type for that project.
 - **Selective sync has hidden dependencies.** `policy_bindings` depends on `iam`. `permission_relationships` depends on both `iam` and `policy_bindings`. `bigquery_connection` depends on `bigquery`.
-- **Do not pass placeholder strings.** Substitute `<ORG_ID>`, `<HOST_PROJECT>`, `<TENANT_ACCOUNT_ID>`, and `<TENANT_ID>` before running any command.
+- **Do not pass placeholder strings.** Substitute `<ORG_ID>`, `<HOST_PROJECT>`, `<PROJECT_ID>`, `<TENANT_ACCOUNT_ID>`, and `<TENANT_ID>` before running any command.
 - **A Secrets Manager ARN needs the separate Secrets account setup.** `SubImageScanRole` does not grant secret access. Before using an ARN for the service-account-key fallback, configure the account and `SubImageSecretsRole` as described below.
 
 ## Path A: Terraform
@@ -161,7 +161,6 @@ resource "google_project_service" "core" {
     "iam.googleapis.com",
     "sts.googleapis.com",
     "cloudasset.googleapis.com",
-    "run.googleapis.com",
   ])
   project            = var.subimage_host_project
   service            = each.key
@@ -218,7 +217,6 @@ gcloud services enable \
   iam.googleapis.com \
   sts.googleapis.com \
   cloudasset.googleapis.com \
-  run.googleapis.com \
   --project="$HOST_PROJECT"
 
 gcloud iam workload-identity-pools create "$POOL_ID" \
@@ -267,26 +265,27 @@ gcloud projects add-iam-policy-binding "<GAR_PROJECT>" \
   --role="roles/artifactregistry.reader"
 ```
 
-## Enable optional APIs on the host project
+## Enable resource APIs only where they are off
 
-Enable optional APIs based on what the user wants synced:
+SubImage syncs a resource type only in projects where its API is enabled in that project. Projects that run a service already have its API on, so this step is normally unnecessary. Use it only when the user wants a resource type covered in a specific project and its API is disabled there:
 
 ```bash
-gcloud services enable compute.googleapis.com --project="$HOST_PROJECT"
-gcloud services enable storage.googleapis.com --project="$HOST_PROJECT"
-gcloud services enable container.googleapis.com --project="$HOST_PROJECT"
-gcloud services enable dns.googleapis.com --project="$HOST_PROJECT"
-gcloud services enable cloudkms.googleapis.com --project="$HOST_PROJECT"
-gcloud services enable bigtableadmin.googleapis.com --project="$HOST_PROJECT"
-gcloud services enable sqladmin.googleapis.com --project="$HOST_PROJECT"
-gcloud services enable cloudfunctions.googleapis.com --project="$HOST_PROJECT"
-gcloud services enable secretmanager.googleapis.com --project="$HOST_PROJECT"
-gcloud services enable artifactregistry.googleapis.com --project="$HOST_PROJECT"
-gcloud services enable aiplatform.googleapis.com --project="$HOST_PROJECT"
-gcloud services enable notebooks.googleapis.com --project="$HOST_PROJECT"
-gcloud services enable bigquery.googleapis.com --project="$HOST_PROJECT"
-gcloud services enable bigqueryconnection.googleapis.com --project="$HOST_PROJECT"
-gcloud services enable apikeys.googleapis.com --project="$HOST_PROJECT"
+gcloud services enable compute.googleapis.com --project="<PROJECT_ID>"
+gcloud services enable storage.googleapis.com --project="<PROJECT_ID>"
+gcloud services enable container.googleapis.com --project="<PROJECT_ID>"
+gcloud services enable dns.googleapis.com --project="<PROJECT_ID>"
+gcloud services enable cloudkms.googleapis.com --project="<PROJECT_ID>"
+gcloud services enable bigtableadmin.googleapis.com --project="<PROJECT_ID>"
+gcloud services enable sqladmin.googleapis.com --project="<PROJECT_ID>"
+gcloud services enable cloudfunctions.googleapis.com --project="<PROJECT_ID>"
+gcloud services enable run.googleapis.com --project="<PROJECT_ID>"
+gcloud services enable secretmanager.googleapis.com --project="<PROJECT_ID>"
+gcloud services enable artifactregistry.googleapis.com --project="<PROJECT_ID>"
+gcloud services enable aiplatform.googleapis.com --project="<PROJECT_ID>"
+gcloud services enable notebooks.googleapis.com --project="<PROJECT_ID>"
+gcloud services enable bigquery.googleapis.com --project="<PROJECT_ID>"
+gcloud services enable bigqueryconnection.googleapis.com --project="<PROJECT_ID>"
+gcloud services enable apikeys.googleapis.com --project="<PROJECT_ID>"
 ```
 
 ## Register the module in SubImage
@@ -383,7 +382,7 @@ Look for `gcp` with `status: synced`. If the sync fails with GCP API `PERMISSION
 - **GCP sync finishes as Degraded for policy bindings**: enable `cloudasset.googleapis.com` on the host project and grant `roles/cloudasset.viewer` at the organization level.
 - **`Permission 'run.revisions.get' denied` in sync logs**: grant `roles/run.viewer`; Cloud Run services deployed by tag cannot be linked to their images without it.
 - **GAR image scanning fails**: grant `roles/artifactregistry.reader` on the specific repositories or projects that contain images.
-- **Sync logs say "API disabled"**: enable the corresponding API on the host project, or leave it disabled if the user does not need that collector.
+- **A resource type is missing for one project**: check that its API is enabled in that project (`gcloud services list --enabled --project=<PROJECT_ID>`). Enabling it on the host project does not help other projects.
 - **Selective sync surprise**: `policy_bindings` depends on `iam`; `permission_relationships` depends on both `iam` and `policy_bindings`; `bigquery_connection` depends on `bigquery`.
 
 ## References
