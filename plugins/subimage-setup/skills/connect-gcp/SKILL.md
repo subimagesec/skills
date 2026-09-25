@@ -28,10 +28,9 @@ Before generating commands or HCL, collect these values. **If any are missing, a
 | `<HOST_PROJECT>` | Project that will own the Workload Identity Pool, or the service account on the JSON-key path. Discovery and Cloud Asset calls use it as their quota project. Pick an existing infra/security project or create one. | "Which GCP project should own the SubImage Workload Identity Pool? Discovery and Cloud Asset API calls are charged to it." |
 | `<TENANT_ACCOUNT_ID>` | SubImage tenant AWS account ID. SubImage auto-fills this in **Settings -> Modules -> GCP** and in the GCP setup docs. It is also visible in the AWS module principal ARN. | "What is your SubImage tenant AWS account ID? It should be a 12-digit AWS account ID from the GCP setup docs or the AWS principal ARN." |
 | `<TENANT_ID>` | SubImage tenant slug. Same setup docs table; also appears in `<TENANT_ID>-subimage-readonly`. | "What is your SubImage tenant ID? It is the slug used in `<TENANT_ID>-subimage-readonly`." |
-| `<PROJECT_ID>` | Only needed to enable a resource API in a scanned project where it is disabled. Ask only when that step applies; skip it otherwise. | "Which project should SubImage cover for this resource type? Its API is disabled there." |
 | Coverage scope | Org root, a folder, or a single project. | "Should SubImage cover the entire organization, a specific folder, or one project?" |
 | GAR scanning | Whether SubImage should scan images in Google Artifact Registry. | "Should SubImage scan container images stored in Google Artifact Registry? If yes, which projects or repositories contain them?" |
-| Optional roles | Whether to include `bigquery.dataViewer`, `bigquery.connectionUser`, `cloudsql.viewer`, `notebooks.viewer`, or `serviceusage.apiKeysViewer`. | "Do you want optional coverage for BigQuery, Cloud SQL, Notebooks, or API keys? Default: only the six required roles." |
+| Optional roles | Whether to include `bigquery.dataViewer`, `bigquery.connectionUser`, `cloudsql.viewer`, `notebooks.viewer`, or the list-only API key custom role. | "Do you want optional coverage for BigQuery, Cloud SQL, Notebooks, or API keys? Default: only the six required roles." |
 | Path choice | Terraform or `gcloud`. | "Which path: Terraform (recommended for IaC repos) or `gcloud` (one-off setup)?" |
 
 Suggested IDs:
@@ -60,7 +59,7 @@ Optional roles:
 | Role | Adds |
 |---|---|
 | `roles/notebooks.viewer` | Vertex AI Workbench resources. |
-| `roles/serviceusage.apiKeysViewer` | GCP API keys from `apikeys.googleapis.com`. |
+| Custom role with `apikeys.keys.list` | GCP API key inventory. Do not use `roles/serviceusage.apiKeysViewer`: it also grants `apikeys.keys.getKeyString`, which reads every key's secret value, and SubImage only lists keys. See [API key inventory](#api-key-inventory). |
 | `roles/cloudsql.viewer` | Cloud SQL instances, databases, and users. |
 | `roles/bigquery.dataViewer` | BigQuery datasets and tables. |
 | `roles/bigquery.connectionUser` | BigQuery connection resources. |
@@ -79,7 +78,7 @@ Read these before generating commands; they correct the most common wrong assump
 - **GAR image scanning needs Artifact Registry access.** If the user wants vulnerability/SBOM scanning for GAR images, grant `roles/artifactregistry.reader` on the relevant repositories or projects. Organization scope is easiest but broader than necessary.
 - **Host project APIs and resource APIs are enabled in different places.** An API must be enabled in the project Google charges the call to (the quota project). SubImage sets no explicit quota project, so discovery, STS, and Cloud Asset Inventory calls use the host project that owns the pool/provider; enable `cloudresourcemanager`, `serviceusage`, `iam`, `sts`, and `cloudasset` there. Every other collector (Compute, Cloud Run, GKE, API keys, and so on) runs only in scanned projects where that resource's API is enabled *in that project*. Enabling a resource API on the host project covers only the host project's own resources. Projects that run a service already have its API enabled, so do not tell the user to enable resource APIs on the host project to get org-wide coverage. A disabled resource API does not break the sync; SubImage skips that resource type for that project.
 - **Selective sync has hidden dependencies.** `policy_bindings` depends on `iam`. `permission_relationships` depends on both `iam` and `policy_bindings`. `bigquery_connection` depends on `bigquery`.
-- **Do not pass placeholder strings.** Substitute `<ORG_ID>`, `<HOST_PROJECT>`, `<PROJECT_ID>`, `<TENANT_ACCOUNT_ID>`, and `<TENANT_ID>` before running any command.
+- **Do not pass placeholder strings.** Substitute `<ORG_ID>`, `<HOST_PROJECT>`, `<TENANT_ACCOUNT_ID>`, and `<TENANT_ID>` before running any command.
 - **A Secrets Manager ARN needs the separate Secrets account setup.** `SubImageScanRole` does not grant secret access. Before using an ARN for the service-account-key fallback, configure the account and `SubImageSecretsRole` as described below.
 
 ## Path A: Terraform
@@ -266,27 +265,38 @@ gcloud projects add-iam-policy-binding "<GAR_PROJECT>" \
   --role="roles/artifactregistry.reader"
 ```
 
-## Enable resource APIs only where they are off
+## API key inventory
 
-SubImage syncs a resource type only in projects where its API is enabled in that project. Projects that run a service already have its API on, so this step is normally unnecessary. Use it only when the user wants a resource type covered in a specific project and its API is disabled there:
+Only if the user wants GCP API keys in the graph. Create a list-only custom role and bind it at the same scope as the required roles. Creating an organization custom role needs `roles/iam.organizationRoleAdmin`.
+
+Terraform:
+
+```hcl
+resource "google_organization_iam_custom_role" "subimage_apikeys_list" {
+  org_id      = var.subimage_org_id
+  role_id     = "subimageApiKeysList"
+  title       = "SubImage API key inventory"
+  permissions = ["apikeys.keys.list"]
+}
+
+resource "google_organization_iam_member" "subimage_apikeys_list" {
+  org_id = var.subimage_org_id
+  role   = google_organization_iam_custom_role.subimage_apikeys_list.name
+  member = local.subimage_wif_member
+}
+```
+
+gcloud:
 
 ```bash
-gcloud services enable compute.googleapis.com --project="<PROJECT_ID>"
-gcloud services enable storage.googleapis.com --project="<PROJECT_ID>"
-gcloud services enable container.googleapis.com --project="<PROJECT_ID>"
-gcloud services enable dns.googleapis.com --project="<PROJECT_ID>"
-gcloud services enable cloudkms.googleapis.com --project="<PROJECT_ID>"
-gcloud services enable bigtableadmin.googleapis.com --project="<PROJECT_ID>"
-gcloud services enable sqladmin.googleapis.com --project="<PROJECT_ID>"
-gcloud services enable cloudfunctions.googleapis.com --project="<PROJECT_ID>"
-gcloud services enable run.googleapis.com --project="<PROJECT_ID>"
-gcloud services enable secretmanager.googleapis.com --project="<PROJECT_ID>"
-gcloud services enable artifactregistry.googleapis.com --project="<PROJECT_ID>"
-gcloud services enable aiplatform.googleapis.com --project="<PROJECT_ID>"
-gcloud services enable notebooks.googleapis.com --project="<PROJECT_ID>"
-gcloud services enable bigquery.googleapis.com --project="<PROJECT_ID>"
-gcloud services enable bigqueryconnection.googleapis.com --project="<PROJECT_ID>"
-gcloud services enable apikeys.googleapis.com --project="<PROJECT_ID>"
+gcloud iam roles create subimageApiKeysList \
+  --organization="$ORG_ID" \
+  --title="SubImage API key inventory" \
+  --permissions=apikeys.keys.list
+
+gcloud organizations add-iam-policy-binding "$ORG_ID" \
+  --member="$SUBIMAGE_WIF_MEMBER" \
+  --role="organizations/${ORG_ID}/roles/subimageApiKeysList"
 ```
 
 ## Register the module in SubImage
@@ -383,7 +393,7 @@ Look for `gcp` with `status: synced`. If the sync fails with GCP API `PERMISSION
 - **GCP sync finishes as Degraded for policy bindings**: enable `cloudasset.googleapis.com` on the host project and grant `roles/cloudasset.viewer` at the organization level.
 - **`Permission 'run.revisions.get' denied` in sync logs**: grant `roles/run.viewer`; Cloud Run services deployed by tag cannot be linked to their images without it.
 - **GAR image scanning fails**: grant `roles/artifactregistry.reader` on the specific repositories or projects that contain images.
-- **A resource type is missing for one project**: check that its API is enabled in that project (`gcloud services list --enabled --project=<PROJECT_ID>`). Enabling it on the host project does not help other projects.
+- **A resource type is missing for one project**: SubImage syncs a resource type only where its API is enabled in that project. Ask the user which project, check with `gcloud services list --enabled --project` on it, and enable the API there if they want it covered. Enabling it on the host project does not help other projects.
 - **Selective sync surprise**: `policy_bindings` depends on `iam`; `permission_relationships` depends on both `iam` and `policy_bindings`; `bigquery_connection` depends on `bigquery`.
 
 ## References
