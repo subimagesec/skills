@@ -25,9 +25,10 @@ Before generating commands or HCL, collect these values. **If any are missing, a
 | Value | Where to find it | If missing, ask |
 |---|---|---|
 | `<ORG_ID>` | Numeric organization ID. `gcloud organizations list` returns it. | "What is your GCP organization ID? Run `gcloud organizations list` to find it." |
-| `<HOST_PROJECT>` | Project that will own the Workload Identity Pool and absorb API billing. Pick an existing infra/security project or create one. | "Which GCP project should host the SubImage Workload Identity Pool and absorb API billing?" |
+| `<HOST_PROJECT>` | Project that will own the Workload Identity Pool, or the service account on the JSON-key path. Discovery and Cloud Asset calls use it as their quota project. Pick an existing infra/security project or create one. | "Which GCP project should own the SubImage Workload Identity Pool? Discovery and Cloud Asset API calls are charged to it." |
 | `<TENANT_ACCOUNT_ID>` | SubImage tenant AWS account ID. SubImage auto-fills this in **Settings -> Modules -> GCP** and in the GCP setup docs. It is also visible in the AWS module principal ARN. | "What is your SubImage tenant AWS account ID? It should be a 12-digit AWS account ID from the GCP setup docs or the AWS principal ARN." |
 | `<TENANT_ID>` | SubImage tenant slug. Same setup docs table; also appears in `<TENANT_ID>-subimage-readonly`. | "What is your SubImage tenant ID? It is the slug used in `<TENANT_ID>-subimage-readonly`." |
+| `<PROJECT_ID>` | Only needed to enable a resource API in a scanned project where it is disabled. Ask only when that step applies; skip it otherwise. | "Which project should SubImage cover for this resource type? Its API is disabled there." |
 | Coverage scope | Org root, a folder, or a single project. | "Should SubImage cover the entire organization, a specific folder, or one project?" |
 | GAR scanning | Whether SubImage should scan images in Google Artifact Registry. | "Should SubImage scan container images stored in Google Artifact Registry? If yes, which projects or repositories contain them?" |
 | Optional roles | Whether to include `bigquery.dataViewer`, `bigquery.connectionUser`, `cloudsql.viewer`, `notebooks.viewer`, or `serviceusage.apiKeysViewer`. | "Do you want optional coverage for BigQuery, Cloud SQL, Notebooks, or API keys? Default: only the six required roles." |
