@@ -58,6 +58,8 @@ Ask only when the requested tenant or scope is genuinely ambiguous.
 - Follow `subimage-mcp:build-cypher-query` discipline. Validate labels,
   properties, relationships, and directions with `subimageGetNodesSchema` or a
   `searchModelQueries` hit before running a template.
+- For `Rule`, `Finding`, and `Signal`, use the authoritative shapes in
+  `subimage-mcp:signals-via-cypher`; the node-schema API does not expose them.
 
 If MCP authorization fails, stop querying that tenant, report the exact error,
 and ask the user to reconnect it. Treat every dependent lane as unavailable,
@@ -78,7 +80,8 @@ outside those templates. Start with:
 
 `AIBOMSource`, `AIBOMComponent`, `AIAgent`, `AIModel`, `AITool`, `AIMemory`,
 `AIPrompt`, `AIEmbedding`, `AWSBedrockAgent`, `AWSBedrockKnowledgeBase`,
-`AWSBedrockGuardrail`, `AWSBedrockProvisionedModelThroughput`, `AWSRole`,
+`AWSBedrockGuardrail`, `AWSBedrockFoundationModel`, `AWSBedrockCustomModel`,
+`AWSBedrockProvisionedModelThroughput`, `AWSRole`,
 `AWSLambda`, `AWSSageMakerEndpoint`, `AWSSageMakerModel`,
 `AWSSageMakerEndpointConfig`, `GCPVertexAIEndpoint`,
 `GCPVertexAIDeployedModel`, `GCPVertexAIModel`,
@@ -86,7 +89,7 @@ outside those templates. Start with:
 `AzureSubscription`, `OpenAIOrganization`, `OpenAIProject`, `OpenAIUser`,
 `OpenAIServiceAccount`, `OpenAIApiKey`, `OpenAIAdminApiKey`,
 `AnthropicOrganization`, `AnthropicWorkspace`, `AnthropicUser`,
-`AnthropicApiKey`, `ThirdPartyApp`, `UserAccount`, `Rule`, `Finding`, `Signal`,
+`AnthropicApiKey`, `ThirdPartyApp`, `UserAccount`,
 `Container`, `Image`, `CodeRepository`, `FilesystemSnapshot`, `APIKey`, and the
 provider tenant labels returned by discovery.
 
@@ -142,7 +145,9 @@ Use one of these conclusions:
   and returned no rows, but coverage is not complete.
 - **No matching assets found within verified coverage**: all relevant modules
   are enabled and current, schema was verified, and every applicable lane was
-  queried.
+  queried. For code-derived assets, also verify that every image or repository
+  in the requested scope has a completed scan. Healthy module status and an
+  empty coverage-gap query alone do not establish that coverage.
 
 ### 5. Pivot only as needed
 
