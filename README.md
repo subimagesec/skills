@@ -60,6 +60,7 @@ After install, skills are namespaced under their plugin:
 /subimage-mcp:investigate-cve
 /subimage-mcp:investigate-package
 /subimage-mcp:investigate-iam
+/subimage-mcp:explore-ai-assets
 /subimage-mcp:investigate-container
 /subimage-mcp:investigate-ip
 /subimage-mcp:investigate-public-exposure
@@ -107,6 +108,7 @@ plugins/
       investigate-cve/SKILL.md
       investigate-package/SKILL.md
       investigate-iam/SKILL.md
+      explore-ai-assets/SKILL.md
       investigate-container/SKILL.md
       investigate-ip/SKILL.md
       investigate-public-exposure/SKILL.md

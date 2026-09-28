@@ -2,7 +2,7 @@
 	"name": "subimage-mcp",
 	"displayName": "SubImage MCP",
 	"version": "0.1.0",
-	"description": "Operator workflows over the SubImage MCP server: triage findings, investigate CVEs, trace package origin, audit IAM privilege, investigate containers and clusters, resolve IP/domain ownership, explain public exposure causes, review attack paths, audit SubImage coverage, build Cypher queries, author tenant-local custom rules, and identify Infrastructure-as-Code repositories.",
+	"description": "Operator workflows over the SubImage MCP server: triage findings, investigate CVEs, trace package origin, audit IAM privilege, explore AI assets, investigate containers and clusters, resolve IP/domain ownership, explain public exposure causes, review attack paths, audit SubImage coverage, build Cypher queries, author tenant-local custom rules, and identify Infrastructure-as-Code repositories.",
 	"author": {
 		"name": "SubImage",
 		"email": "support@subimage.io",
@@ -20,6 +20,8 @@
 		"package",
 		"provenance",
 		"iam",
+		"ai",
+		"aibom",
 		"container",
 		"kubernetes",
 		"ip",
