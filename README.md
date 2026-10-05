@@ -129,7 +129,7 @@ Each `SKILL.md` follows the [Agent Skills standard](https://agentskills.io), wit
 - Never paste a literal `{{...}}` placeholder. Use `<NAMED_VAR>` and instruct the agent to ask the user for the value if it is not yet known.
 - No em-dashes (`—`) in any markdown. Use `:`, `;`, `,`, or parentheses.
 - Stay under the 500-line / 5,000-token soft limit per `SKILL.md`. If a skill exceeds it, split detailed reference material into a `references/` subdirectory and tell the agent when to load it.
-- Bump the plugin `version` in every manifest (`plugins/<plugin>/.{claude,codex,cursor}-plugin/plugin.json` and both `marketplace.json` files) when you change a plugin's skills. Clients cache installed plugins by version, so existing installs never see an edit that ships under the old one.
+- Bump the plugin `version` in every manifest (`plugins/<plugin>/.{claude,codex,cursor}-plugin/plugin.json` and `.claude-plugin/marketplace.json` plus `.cursor-plugin/marketplace.json`; the Codex catalog at `.agents/plugins/marketplace.json` has no version) when you change a plugin's skills. Clients cache installed plugins by version, so existing installs never see an edit that ships under the old one.
 
 ## License
 
