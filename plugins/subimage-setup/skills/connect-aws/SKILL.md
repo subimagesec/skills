@@ -40,9 +40,9 @@ arn:aws:iam::<TENANT_ACCOUNT_ID>:role/<TENANT_ID>-subimage-readonly
 `SubImageScanRole` needs:
 
 - AWS managed policy `arn:aws:iam::aws:policy/SecurityAudit`
-- Inline policies for SSO permission set read, EKS identity provider read, public SSM parameter read, ECR read, Glue and Inspector read, and SES read (full JSON in every path below)
+- Inline policies for SSO permission set read, EKS identity provider read, public SSM parameter read, ECR read, Glue and Inspector read, SES read, and CodeBuild build read (full JSON in every path below)
 
-`SecurityAudit` already covers most discovery actions, including `eks:DescribeCluster`, `eks:ListAccessEntries`, `eks:DescribeAccessEntry`, and the Identity Center and Identity Store list and describe calls. The inline additions cover only what it omits: `sso:GetPermissionSet` (AWS also evaluates it for `DescribePermissionSet`), EKS identity provider configs, AWS-managed public SSM parameters, ECR image pulls used by the image scanner, ECR pull through cache rules, Glue connections, Inspector members, and SES email identities.
+`SecurityAudit` already covers most discovery actions, including `eks:DescribeCluster`, `eks:ListAccessEntries`, `eks:DescribeAccessEntry`, and the Identity Center and Identity Store list and describe calls. The inline additions cover only what it omits: `sso:GetPermissionSet` (AWS also evaluates it for `DescribePermissionSet`), EKS identity provider configs, AWS-managed public SSM parameters, ECR image pulls used by the image scanner, ECR pull through cache rules, Glue connections, Inspector members, SES email identities, and CodeBuild builds (`codebuild:BatchGetBuilds`, used to confirm the builds that pushed ECR images).
 
 ## Gotchas
 
@@ -133,6 +133,14 @@ Deploys the role into every existing and future account in the organization. Ser
                  - Effect: Allow
                    Action:
                      - ses:ListEmailIdentities
+                   Resource: '*'
+           - PolicyName: AllowCodeBuildBuildRead
+             PolicyDocument:
+               Version: '2012-10-17'
+               Statement:
+                 - Effect: Allow
+                   Action:
+                     - codebuild:BatchGetBuilds
                    Resource: '*'
    Outputs:
      SubImageScanRoleArn:
@@ -293,6 +301,19 @@ resource "aws_iam_role_policy" "subimage_ses_read" {
   })
 }
 
+resource "aws_iam_role_policy" "subimage_codebuild_build_read" {
+  name = "AllowCodeBuildBuildRead"
+  role = aws_iam_role.subimage_scan_role.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["codebuild:BatchGetBuilds"]
+      Resource = "*"
+    }]
+  })
+}
+
 output "subimage_scan_role_arn" {
   value = aws_iam_role.subimage_scan_role.arn
 }
@@ -363,6 +384,11 @@ aws iam put-role-policy \
   --role-name SubImageScanRole \
   --policy-name AllowSESRead \
   --policy-document '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["ses:ListEmailIdentities"],"Resource":"*"}]}'
+
+aws iam put-role-policy \
+  --role-name SubImageScanRole \
+  --policy-name AllowCodeBuildBuildRead \
+  --policy-document '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["codebuild:BatchGetBuilds"],"Resource":"*"}]}'
 ```
 
 **Updating a role created with an earlier version of this path.** Skip `create-role` and rerun everything else in the block above, including the `AWS_PARTITION` assignment that the `AllowPublicSSMParameterRead` document depends on. `put-role-policy` only adds or replaces the named policy, so the old `AllowSSORead` wildcard policy stays attached until you delete it:
@@ -375,7 +401,7 @@ aws iam delete-role-policy \
 aws iam list-role-policies --role-name SubImageScanRole
 ```
 
-`delete-role-policy` returns `NoSuchEntity` if the policy is already gone. The listing should show exactly `AllowEKSIdentityRead`, `AllowECRRead`, `AllowPublicSSMParameterRead`, `AllowSSOGlobalActions`, `AllowGlueInspectorRead`, and `AllowSESRead`. If the role is managed by CloudFormation or Terraform, update it through Path A or B instead; both remove renamed policies automatically, and deleting a policy those tools own by hand causes drift.
+`delete-role-policy` returns `NoSuchEntity` if the policy is already gone. The listing should show exactly `AllowEKSIdentityRead`, `AllowECRRead`, `AllowPublicSSMParameterRead`, `AllowSSOGlobalActions`, `AllowGlueInspectorRead`, `AllowSESRead`, and `AllowCodeBuildBuildRead`. If the role is managed by CloudFormation or Terraform, update it through Path A or B instead; both remove renamed policies automatically, and deleting a policy those tools own by hand causes drift.
 
 ## Register the accounts in SubImage
 
