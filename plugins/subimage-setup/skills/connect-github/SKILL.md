@@ -145,16 +145,16 @@ gh api /orgs/<GITHUB_ORG>/installations \
 For PAT, the user can check the token reaches the org before pasting it. On GitHub.com:
 
 ```bash
-GH_TOKEN=<your-token> gh api /orgs/<GITHUB_ORG>
+GH_TOKEN=<your-token> gh api /user/memberships/orgs/<GITHUB_ORG> --jq '{state, role}'
 ```
 
 On Enterprise Server, `gh` reads the token from `GH_ENTERPRISE_TOKEN` and needs the host:
 
 ```bash
-GH_ENTERPRISE_TOKEN=<your-token> gh api --hostname <GHES_HOST> /orgs/<GITHUB_ORG>
+GH_ENTERPRISE_TOKEN=<your-token> gh api --hostname <GHES_HOST> /user/memberships/orgs/<GITHUB_ORG> --jq '{state, role}'
 ```
 
-A successful response proves the token can see the org, not that it has every permission above.
+Expect `state: active`. Public org data is readable by anyone, so check membership rather than `/orgs/<GITHUB_ORG>`. `role: admin` (org owner) is needed for the owner-only data above. This proves the token's user is in the org, not that the token has every permission above.
 
 ## Troubleshooting
 
