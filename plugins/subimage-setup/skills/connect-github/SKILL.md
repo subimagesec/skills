@@ -54,17 +54,22 @@ The App uses short-lived installation tokens, supports multiple orgs (one instal
    **Repository permissions**
    - `Metadata: Read` (required): repo discovery, basic metadata
    - `Contents: Read` (required): files, commits, dependency manifests
-   - `Administration: Read` (required): collaborators, branch protection
+   - `Administration: Read` (required): collaborators, branch protection, secret scanning and push protection status
    - `Actions: Read` (optional): workflows
    - `Environments: Read` (optional): environments
    - `Secrets: Read` (optional): secret metadata only
    - `Variables: Read` (optional): Actions variables
+   - `Webhooks: Read` (optional): repository webhooks
 
    **Organization permissions**
    - `Members: Read` (required): users, teams, memberships
    - `Personal access tokens: Read` (optional, App-only): inventory of fine-grained PATs authorized for the org as `GitHubPersonalAccessToken` nodes. GitHub does not expose this endpoint to PAT-authenticated calls.
    - `Secrets: Read` (optional): org-level secret metadata
    - `Variables: Read` (optional): org Actions variables
+   - `Administration: Read` (optional): org security settings, verified domains, Actions and Copilot policies, installed GitHub Apps
+   - `Webhooks: Read` (optional): org webhooks
+
+   Most org settings are only visible to org owners. A missing optional permission leaves those properties empty (unknown, not disabled) and the rest of the sync continues.
 
    If you change permissions after install, GitHub may ask the org owner to re-approve.
 
@@ -78,7 +83,7 @@ Once the App is installed, you can pin the set of repos it sees from your IaC re
 
 ```hcl
 data "github_app_installation" "subimage" {
-  app_slug = "subimage"
+  app_slug = "subimage-sync"
 }
 
 resource "github_app_installation_repositories" "subimage" {
@@ -98,8 +103,8 @@ This is a follow-up convenience, not a substitute for the install itself.
 Use this only for GitHub Enterprise Server, or for orgs where the App cannot be installed.
 
 1. Generate the token. **The user must do this themselves.** Do not accept or store the raw token in the chat.
-   - **Classic PAT** for multi-org coverage: scopes `repo`, `read:org`, `read:user`, `user:email`.
-   - **Fine-grained PAT** (per-org): permissions `Repository → Metadata: Read`, `Contents: Read`, `Administration: Read`, `Organization → Members: Read`. Fine-grained tokens are scoped to a single org, so you need one per org.
+   - **Classic PAT** for multi-org coverage: scopes `repo`, `read:org`, `read:user`, `user:email`. Optional, when the token's user is an org owner: `admin:org` (org security settings, domains, Actions policy), `admin:org_hook` (org webhooks), `read:repo_hook` (repo webhooks).
+   - **Fine-grained PAT** (per-org): permissions `Repository → Metadata: Read`, `Contents: Read`, `Administration: Read`, `Organization → Members: Read`. Optional: `Repository → Webhooks: Read`, `Organization → Administration: Read`, `Organization → Webhooks: Read`. Fine-grained tokens are scoped to a single org, so you need one per org.
 
 2. SubImage → **Modules → Add → github**. Fill:
    - `github_access_token`: paste the token, or paste an AWS Secrets Manager ARN that holds it. Treat as a credential.

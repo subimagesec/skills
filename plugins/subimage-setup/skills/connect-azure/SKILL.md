@@ -27,7 +27,6 @@ Before running anything, collect these. **If any are missing, ask the user expli
 | `<TENANT_DIRECTORY_ID>` | Azure Directory / Tenant ID. `az account show --query tenantId -o tsv`. | "What is your Azure Directory (Tenant) ID? Run `az account show --query tenantId -o tsv` to find it." |
 | `<SUBSCRIPTION_IDS>` | One or more subscription IDs SubImage should scan. | "Which Azure subscription IDs should SubImage scan? Comma-separated list, or tell me to use a Management Group root instead." |
 | `<MGMT_GROUP_ID>` | Optional: the Management Group ID if you want a single binding to cover many subs. | (Only if user picks the MG path) "What is the Management Group ID? `az account management-group list -o table`." |
-| Sync-all toggle | Whether SubImage should sync every subscription the SP can see, or only the explicit list. | "Do you want SubImage to scan every subscription the SP can see (`azure_sync_all_subscriptions=true`), or only the specific subscription IDs you provided?" |
 | Path choice | Terraform or `az`. | "Which path: Terraform (recommended for IaC repos) or `az` CLI (one-off setup)?" |
 
 ## Permissions baseline
@@ -41,7 +40,7 @@ Before running anything, collect these. **If any are missing, ask the user expli
 Read these before generating any commands; they correct the most common wrong assumptions.
 
 - **Reader covers resources only, not Entra or Intune.** Users, groups, sign-ins, devices come from Microsoft Graph and need a separate `microsoft` module connection. If the user expects Entra coverage from this skill, redirect them.
-- **`azure_sync_all_subscriptions=true` does NOT mean "scan every subscription that exists".** It scans every subscription the SP has been granted Reader on. New subscriptions auto-onboard only if the binding is at the Management Group root above them.
+- **SubImage scans every subscription the SP can see, not every subscription that exists.** There is no subscription toggle; control the scope with Reader bindings. New subscriptions auto-onboard only if the binding is at the Management Group root above them.
 - **Management Group bindings propagate to current AND future child subscriptions.** Use them when the user wants automatic onboarding. Use per-subscription bindings only when the scope must stay frozen.
 - **Client secrets expire.** Default expiry on `az ad sp create-for-rbac` is 1 year. Pre-create with `--years <N>` matching the customer's rotation policy, or queue a rotation reminder.
 - **`Reader` does not allow listing role assignments by default in some hardened Azure configurations.** If `subimageListModules` shows azure stuck in `permission_denied` despite the role being attached, ask the user whether their tenant restricts `Microsoft.Authorization/roleAssignments/read` and add `User Access Administrator` (read-only via custom role) only if needed.
@@ -144,8 +143,27 @@ terraform output -raw subimage_client_secret
    - `azure_tenant_id`: `<TENANT_DIRECTORY_ID>`
    - `azure_client_id`: the app id from Step 1 (or Terraform output)
    - `azure_client_secret`: the password (or its AWS Secrets Manager ARN)
-   - `azure_sync_all_subscriptions`: `true` to scan every sub the SP can see, `false` to scan only the ones you bound.
-3. Save and **Run Sync**.
+3. Save and **Run Sync**. SubImage scans every subscription the SP can see.
+
+### One-time delegated sync (no service principal)
+
+Only when the user can't create a service principal or grant admin consent, and needs a snapshot of what one signed-in user can read. It is attended, manual and short-lived, so don't propose it as a default.
+
+1. The user signs in on a trusted workstation: `az login --tenant <TENANT_DIRECTORY_ID>`.
+2. Immediately before the run, the user mints an Azure Resource Manager token. **The user runs this themselves; never ask for or handle the output:**
+
+   ```bash
+   az account get-access-token \
+     --tenant <TENANT_DIRECTORY_ID> \
+     --resource https://management.azure.com \
+     --query '{accessToken: accessToken, expires_on: expires_on}' \
+     --output json
+   ```
+
+3. In **Modules → azure**: schedule **Manual**, `azure_tenant_id`, enable `azure_delegated_auth`, paste the JSON into `azure_delegated_access_token`, leave the client ID and secret empty. Save and **Run Sync**.
+4. Afterwards: disable delegated auth, clear the token, save.
+
+Limits: coverage is whatever the user's Azure roles allow; Key Vault contents and Synapse artifacts are skipped; the token can't be refreshed. A Microsoft Graph token is rejected: the **microsoft** module has its own delegated sync with a Graph token. Full steps: https://app.subimage.io/docs/modules/azure/setup#one-time-delegated-sync
 
 ### AWS Secrets Manager option
 
@@ -183,7 +201,7 @@ Look for `azure` with `status: synced`.
 ## Troubleshooting
 
 - **`AuthorizationFailed` on a specific subscription**: that subscription is missing the Reader binding. Repeat `az role assignment create` for it, or add it to the Terraform list.
-- **Sub list looks shorter than expected**: with `azure_sync_all_subscriptions=true`, SubImage only sees subs the SP has been granted access to. A Management Group binding fixes this in one shot.
+- **Sub list looks shorter than expected**: SubImage only sees subs the SP has been granted access to. A Management Group binding fixes this in one shot.
 - **Entra users / Intune devices missing**: expected. This module covers resources only; configure the **microsoft** module to also pull Entra and Intune.
 
 ## References
