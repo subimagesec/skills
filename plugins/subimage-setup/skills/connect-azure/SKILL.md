@@ -33,6 +33,8 @@ Before running anything, collect these. **If any are missing, ask the user expli
 
 `Reader` (built-in role) on each in-scope subscription, or once on the Management Group root.
 
+With subscription-scoped Reader, also assign `Management Group Reader` at the Tenant Root Group (or the management groups to cover). Without it, SubImage can't read the management-group hierarchy, subscription placement, or management-group role assignments. `Reader` on a management group already covers this for the groups under it.
+
 `Reader` is enough for resource-plane inventory. Entra ID and Intune objects are NOT covered by this role; they need API permissions on Microsoft Graph, configured via the **microsoft** module.
 
 ## Gotchas
@@ -43,7 +45,7 @@ Read these before generating any commands; they correct the most common wrong as
 - **SubImage scans every subscription the SP can see, not every subscription that exists.** There is no subscription toggle; control the scope with Reader bindings. New subscriptions auto-onboard only if the binding is at the Management Group root above them.
 - **Management Group bindings propagate to current AND future child subscriptions.** Use them when the user wants automatic onboarding. Use per-subscription bindings only when the scope must stay frozen.
 - **Client secrets expire.** Default expiry on `az ad sp create-for-rbac` is 1 year. Pre-create with `--years <N>` matching the customer's rotation policy, or queue a rotation reminder.
-- **`Reader` does not allow listing role assignments by default in some hardened Azure configurations.** If `subimageListModules` shows azure stuck in `permission_denied` despite the role being attached, ask the user whether their tenant restricts `Microsoft.Authorization/roleAssignments/read` and add `User Access Administrator` (read-only via custom role) only if needed.
+- **An `AuthorizationFailed` on one scope means a missing binding, not a missing privileged role.** `Reader` grants `*/read`, including role assignments. Find the subscription or management group in the error and add `Reader` (or `Management Group Reader`) there. Never grant `User Access Administrator`: it can change access, which a read-only scanner must not have.
 - **Do not pass the placeholder strings.** `<TENANT_DIRECTORY_ID>`, `<SUBSCRIPTION_IDS>`, `<APP_ID>`, `<CLIENT_SECRET>` must be substituted. `az` will reject obviously-malformed UUIDs but will sometimes accept partial garbage and fail later in unhelpful ways.
 - **A Secrets Manager ARN needs the separate Secrets account setup.** `SubImageScanRole` does not grant secret access. Before using an ARN for the client secret, configure the account and `SubImageSecretsRole` as described below.
 
@@ -80,6 +82,15 @@ az role assignment create \
   --scope "/providers/Microsoft.Management/managementGroups/<MGMT_GROUP_ID>"
 ```
 
+With subscription-scoped Reader only, grant hierarchy read at the Tenant Root Group (its ID is the tenant ID):
+
+```bash
+az role assignment create \
+  --assignee "$APP_ID" \
+  --role "Management Group Reader" \
+  --scope "/providers/Microsoft.Management/managementGroups/<TENANT_DIRECTORY_ID>"
+```
+
 ## Path B: Terraform
 
 ```hcl
@@ -107,6 +118,13 @@ resource "azurerm_role_assignment" "subimage_reader" {
   for_each             = toset(var.subimage_subscription_ids)
   scope                = "/subscriptions/${each.key}"
   role_definition_name = "Reader"
+  principal_id         = azuread_service_principal.subimage.object_id
+}
+
+# With subscription-scoped Reader only: read the management-group hierarchy.
+resource "azurerm_role_assignment" "subimage_mg_reader" {
+  scope                = "/providers/Microsoft.Management/managementGroups/<TENANT_DIRECTORY_ID>"
+  role_definition_name = "Management Group Reader"
   principal_id         = azuread_service_principal.subimage.object_id
 }
 
@@ -149,6 +167,11 @@ terraform output -raw subimage_client_secret
 
 Only when the user can't create a service principal or grant admin consent, and needs a snapshot of what one signed-in user can read. It is attended, manual and short-lived, so don't propose it as a default.
 
+Before the run, tell the user what it changes, because it writes to the same inventory a service principal would:
+- Coverage is whatever the user's Azure roles allow. Subscriptions from earlier runs that the user can't see are **removed**. Don't use it to refresh an existing inventory with a narrower identity.
+- The token only reaches Azure Resource Manager. Key Vault secrets, keys and certificates aren't synced, but existing ones are kept. Synapse pipelines and linked services are treated as empty, so earlier ones are removed.
+- The token can't be refreshed; the sync stops if it expires.
+
 1. The user signs in on a trusted workstation: `az login --tenant <TENANT_DIRECTORY_ID>`.
 2. Immediately before the run, the user mints an Azure Resource Manager token. **The user runs this themselves; never ask for or handle the output:**
 
@@ -163,7 +186,7 @@ Only when the user can't create a service principal or grant admin consent, and 
 3. In **Modules → azure**: schedule **Manual**, `azure_tenant_id`, enable `azure_delegated_auth`, paste the JSON into `azure_delegated_access_token`, leave the client ID and secret empty. Save and **Run Sync**.
 4. Afterwards: disable delegated auth, clear the token, save.
 
-Limits: coverage is whatever the user's Azure roles allow; Key Vault contents and Synapse artifacts are skipped; the token can't be refreshed. A Microsoft Graph token is rejected: the **microsoft** module has its own delegated sync with a Graph token. Full steps: https://app.subimage.io/docs/modules/azure/setup#one-time-delegated-sync
+A Microsoft Graph token is rejected: the **microsoft** module has its own delegated sync with a Graph token. Full steps: https://app.subimage.io/docs/modules/azure/setup#one-time-delegated-sync
 
 ### AWS Secrets Manager option
 
@@ -196,7 +219,7 @@ Then in any MCP-connected AI client:
 subimageListModules()
 ```
 
-Look for `azure` with `status: synced`.
+Find the entry with `module_name: azure`. Expect `last_sync_status: success` and a `last_sync_completed_at` after the sync you started. If it shows `config_error` or `failed`, read `last_sync_error`.
 
 ## Troubleshooting
 

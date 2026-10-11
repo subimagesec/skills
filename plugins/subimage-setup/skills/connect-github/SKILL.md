@@ -21,7 +21,7 @@ Connects one or more GitHub organizations into SubImage so it can map repositori
 
 | Value | Where to find it | If missing, ask |
 |---|---|---|
-| `<GITHUB_ORG>` | The GitHub organization slug(s) you want SubImage to cover. | "Which GitHub organization slug(s) should SubImage scan? Comma-separated if more than one." |
+| `<GITHUB_ORG>` | The GitHub organization slug(s) you want SubImage to cover. | "Which GitHub organization slug(s) should SubImage scan? List each one." |
 | Path choice | App or PAT. | "Are you on GitHub.com or Enterprise Cloud (recommended: **GitHub App**), or self-hosted GitHub Enterprise Server (use **PAT**)?" |
 | `<GITHUB_PAT>` (PAT path only) | A token the user generates. **Do not generate or accept tokens for the user.** | (PAT path) "Generate the token yourself at GitHub Settings → Developer settings → Personal access tokens, then paste it directly into the SubImage UI's secret field. I will not handle the raw token." |
 | `<GHE_GRAPHQL_URL>` (GHES only) | GraphQL endpoint of the on-prem GitHub Enterprise Server. | (GHES) "What is the GraphQL endpoint of your GitHub Enterprise Server? Format: `https://<host>/api/graphql`." |
@@ -34,7 +34,7 @@ Read these before generating any commands; they correct the most common wrong as
 
 - **App vs PAT precedence: the App always wins.** When the same org has both an App install and a PAT configured, SubImage uses the App. The PAT is only consulted as a fallback for orgs that have no App install.
 - **The App only sees repos in the installation.** "Selected repositories" caps coverage to that list. Switching to "all repositories" requires the org owner to re-approve the install. Manage the list afterward via Terraform `github_app_installation_repositories` if you want IaC ownership.
-- **Changing App permissions later may force re-approval.** GitHub treats permission changes on an installed App as a new consent step; the org owner gets a re-approve banner and the install pauses until it is accepted.
+- **Changing App permissions later needs re-approval.** GitHub asks the org owner to approve new permissions. Until they do, the installation keeps working with its existing permissions; only the newly requested data is missing.
 - **Fine-grained PATs are single-org.** A multi-org PAT setup with fine-grained tokens needs one token per org, each with its own per-org ARN entry in SubImage. Do not try to share a single fine-grained PAT across orgs.
 - **Classic PAT scope `repo` is broader than SubImage needs.** It grants write access to repos. SubImage uses read paths only, but the PAT is over-privileged from a least-privilege standpoint. On GitHub.com / Enterprise Cloud, prefer the App. PATs are the right answer only on Enterprise Server or where the App cannot be installed.
 - **GHES URL is the GraphQL endpoint, not the REST one.** `github_url` for an Enterprise Server install is `https://<host>/api/graphql`, not `https://<host>/api/v3` or `https://<host>`. Wrong URL produces "endpoint not found" errors that look like network problems but are configuration problems.
@@ -71,23 +71,22 @@ The App uses short-lived installation tokens, supports multiple orgs (one instal
 
    Most org settings are only visible to org owners. A missing optional permission leaves those properties empty (unknown, not disabled) and the rest of the sync continues.
 
-   If you change permissions after install, GitHub may ask the org owner to re-approve.
-
 4. Repeat for every additional GitHub org you want covered.
 
 5. In SubImage, open **Modules → github**. Set `github_url` to `https://api.github.com/graphql` (the default) and save. No PAT or org list required for App-covered orgs.
 
 ### Optional: manage installed repos via Terraform
 
-Once the App is installed, you can pin the set of repos it sees from your IaC repo:
+Once the App is installed, you can pin the set of repos it sees from your IaC repo. Get the installation ID with the `gh api /orgs/<GITHUB_ORG>/installations` command under Verification. The GitHub provider must authenticate as a user or token with org admin rights; it can't use the App's own installation token for this resource.
 
 ```hcl
-data "github_app_installation" "subimage" {
-  app_slug = "subimage-sync"
+variable "subimage_installation_id" {
+  type        = string
+  description = "Installation ID of the SubImage Sync GitHub App in this org"
 }
 
 resource "github_app_installation_repositories" "subimage" {
-  installation_id = data.github_app_installation.subimage.installation_id
+  installation_id = var.subimage_installation_id
   selected_repositories = [
     "platform-infra",
     "service-foo",
@@ -102,13 +101,13 @@ This is a follow-up convenience, not a substitute for the install itself.
 
 Use this only for GitHub Enterprise Server, or for orgs where the App cannot be installed.
 
-1. Generate the token. **The user must do this themselves.** Do not accept or store the raw token in the chat.
+1. Generate the token. **The user must do this themselves.** Do not accept or store the raw token in the chat. Scopes alone aren't enough: collaborators and branch protection need the token's user to be an org owner or repository administrator, and repository security settings and webhooks need repository administrator, org owner, or security manager access.
    - **Classic PAT** for multi-org coverage: scopes `repo`, `read:org`, `read:user`, `user:email`. Optional, when the token's user is an org owner: `admin:org` (org security settings, domains, Actions policy), `admin:org_hook` (org webhooks). Repo webhooks need no extra scope: `repo` covers them on repositories the user administers.
    - **Fine-grained PAT** (per-org): permissions `Repository → Metadata: Read`, `Contents: Read`, `Administration: Read`, `Organization → Members: Read`. Optional: `Repository → Webhooks: Read`, `Organization → Administration: Read`, `Organization → Webhooks: Read`. Fine-grained tokens are scoped to a single org, so you need one per org.
 
 2. SubImage → **Modules → Add → github**. Fill:
    - `github_access_token`: paste the token, or paste an AWS Secrets Manager ARN that holds it. Treat as a credential.
-   - `github_orgs`: comma-separated list of org slugs. One classic PAT can cover all of them; fine-grained PATs need one entry per org with its own per-org token ARN.
+   - `github_orgs`: add a separate entry for each org slug. A comma-separated string is read as a single org name. One classic PAT can cover all of them; fine-grained PATs need one entry per org with its own per-org token ARN.
    - `github_url`: `https://api.github.com/graphql` for SaaS, or `<GHE_GRAPHQL_URL>` for Enterprise Server.
 
 3. Save. SubImage validates the token on next sync.
@@ -134,7 +133,7 @@ After install or PAT save, run a sync from SubImage → **Modules → github →
 subimageListModules()
 ```
 
-Look for `github` with `status: synced` and a non-zero `lastSyncEndedAt`.
+Find the entry with `module_name: github`. Expect `last_sync_status: success` and a `last_sync_completed_at` after the sync you started. If it shows `config_error` or `failed`, read `last_sync_error`.
 
 A quick external sanity check that the App is installed (does not validate SubImage's side, just the install state):
 
@@ -143,12 +142,19 @@ gh api /orgs/<GITHUB_ORG>/installations \
   --jq '.installations[] | select(.app_slug == "subimage-sync") | {id, target_type, repository_selection}'
 ```
 
-For PAT, validate the token reaches the right scopes before pasting it:
+For PAT, the user can check the token reaches the org before pasting it. On GitHub.com:
 
 ```bash
-GH_TOKEN=<your-token> gh auth status
-GH_TOKEN=<your-token> gh api /user
+GH_TOKEN=<your-token> gh api /orgs/<GITHUB_ORG>
 ```
+
+On Enterprise Server, `gh` reads the token from `GH_ENTERPRISE_TOKEN` and needs the host:
+
+```bash
+GH_ENTERPRISE_TOKEN=<your-token> gh api --hostname <GHES_HOST> /orgs/<GITHUB_ORG>
+```
+
+A successful response proves the token can see the org, not that it has every permission above.
 
 ## Troubleshooting
 
