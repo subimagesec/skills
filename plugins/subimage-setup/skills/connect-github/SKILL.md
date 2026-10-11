@@ -103,7 +103,7 @@ This is a follow-up convenience, not a substitute for the install itself.
 Use this only for GitHub Enterprise Server, or for orgs where the App cannot be installed.
 
 1. Generate the token. **The user must do this themselves.** Do not accept or store the raw token in the chat.
-   - **Classic PAT** for multi-org coverage: scopes `repo`, `read:org`, `read:user`, `user:email`. Optional, when the token's user is an org owner: `admin:org` (org security settings, domains, Actions policy), `admin:org_hook` (org webhooks), `read:repo_hook` (repo webhooks).
+   - **Classic PAT** for multi-org coverage: scopes `repo`, `read:org`, `read:user`, `user:email`. Optional, when the token's user is an org owner: `admin:org` (org security settings, domains, Actions policy), `admin:org_hook` (org webhooks). Repo webhooks need no extra scope: `repo` covers them on repositories the user administers.
    - **Fine-grained PAT** (per-org): permissions `Repository → Metadata: Read`, `Contents: Read`, `Administration: Read`, `Organization → Members: Read`. Optional: `Repository → Webhooks: Read`, `Organization → Administration: Read`, `Organization → Webhooks: Read`. Fine-grained tokens are scoped to a single org, so you need one per org.
 
 2. SubImage → **Modules → Add → github**. Fill:
@@ -140,7 +140,7 @@ A quick external sanity check that the App is installed (does not validate SubIm
 
 ```bash
 gh api /orgs/<GITHUB_ORG>/installations \
-  --jq '.installations[] | select(.app_slug == "subimage") | {id, target_type, repository_selection}'
+  --jq '.installations[] | select(.app_slug == "subimage-sync") | {id, target_type, repository_selection}'
 ```
 
 For PAT, validate the token reaches the right scopes before pasting it:

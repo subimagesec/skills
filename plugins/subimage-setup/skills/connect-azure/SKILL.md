@@ -7,7 +7,7 @@ description: Connect an Azure tenant to SubImage by creating a service principal
 
 ## What this does
 
-Registers an application in Microsoft Entra (Azure AD), creates a service principal, generates a client secret, and grants `Reader` on the subscriptions to scan. Walks two paths: Terraform and `az` CLI.
+Registers an application in Microsoft Entra (Azure AD), creates a service principal, generates a client secret, and grants `Reader` on the subscriptions to scan. Walks two paths: Terraform and `az` CLI. A third, one-time delegated sync covers tenants that can't create a service principal at all.
 
 ## When to use
 
@@ -20,14 +20,14 @@ Registers an application in Microsoft Entra (Azure AD), creates a service princi
 
 ## Required inputs
 
-Before running anything, collect these. **If any are missing, ask the user explicitly.**
+Before running anything, collect these. **If any are missing, ask the user explicitly.** For the one-time delegated sync, only the tenant ID is needed; skip the subscription and Management Group rows.
 
 | Value | Where to find it | If missing, ask |
 |---|---|---|
 | `<TENANT_DIRECTORY_ID>` | Azure Directory / Tenant ID. `az account show --query tenantId -o tsv`. | "What is your Azure Directory (Tenant) ID? Run `az account show --query tenantId -o tsv` to find it." |
 | `<SUBSCRIPTION_IDS>` | One or more subscription IDs SubImage should scan. | "Which Azure subscription IDs should SubImage scan? Comma-separated list, or tell me to use a Management Group root instead." |
 | `<MGMT_GROUP_ID>` | Optional: the Management Group ID if you want a single binding to cover many subs. | (Only if user picks the MG path) "What is the Management Group ID? `az account management-group list -o table`." |
-| Path choice | Terraform or `az`. | "Which path: Terraform (recommended for IaC repos) or `az` CLI (one-off setup)?" |
+| Path choice | Terraform, `az`, or the one-time delegated sync. | "Which path: Terraform (recommended for IaC repos) or `az` CLI (one-off setup)? If you can't create a service principal at all, there is also a one-time delegated sync with your own sign-in." |
 
 ## Permissions baseline
 
