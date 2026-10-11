@@ -101,7 +101,7 @@ This is a follow-up convenience, not a substitute for the install itself.
 
 Use this only for GitHub Enterprise Server, or for orgs where the App cannot be installed.
 
-1. Generate the token. **The user must do this themselves.** Do not accept or store the raw token in the chat. Scopes alone aren't enough: collaborators and branch protection need the token's user to be an org owner or repository administrator, and repository security settings and webhooks need repository administrator, org owner, or security manager access.
+1. Generate the token. **The user must do this themselves.** Do not accept or store the raw token in the chat. Scopes alone aren't enough: collaborators and branch protection need the token's user to be an org owner or repository administrator, repository security settings need repository administrator, org owner, or security manager access, and repository webhooks need repository administrator or org owner access.
    - **Classic PAT** for multi-org coverage: scopes `repo`, `read:org`, `read:user`, `user:email`. Optional, when the token's user is an org owner: `admin:org` (org security settings, domains, Actions policy), `admin:org_hook` (org webhooks). Repo webhooks need no extra scope: `repo` covers them on repositories the user administers.
    - **Fine-grained PAT** (per-org): permissions `Repository → Metadata: Read`, `Contents: Read`, `Administration: Read`, `Organization → Members: Read`. Optional: `Repository → Webhooks: Read`, `Organization → Administration: Read`, `Organization → Webhooks: Read`. Fine-grained tokens are scoped to a single org, so you need one per org.
 
