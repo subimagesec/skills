@@ -1,6 +1,6 @@
 ---
 name: connect-azure
-description: Connect an Azure tenant to SubImage by creating a service principal with Reader role on the subscriptions you want scanned. Use when the user asks to "connect Azure to SubImage", "set up Azure scanning", "create the SubImage Azure SP", "wire Azure into SubImage", or works in a Terraform repo and wants SubImage to inventory their Azure subscriptions, resource groups, and Entra. Covers Terraform and az-cli paths.
+description: Connect an Azure tenant to SubImage by creating a service principal with Reader role on the subscriptions you want scanned. Use when the user asks to "connect Azure to SubImage", "set up Azure scanning", "create the SubImage Azure SP", "wire Azure into SubImage", or works in a Terraform repo and wants SubImage to inventory their Azure subscriptions, resource groups, and Entra. Covers Terraform and az-cli paths, plus a one-time delegated sync for tenants that can't create a service principal.
 ---
 
 # Connect Azure to SubImage
