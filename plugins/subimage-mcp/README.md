@@ -41,6 +41,7 @@ Open **Preferences** -> **Cursor Settings** -> **Rules, Skills, Subagents**, the
 | [`subimage-mcp:signals-via-cypher`](./skills/signals-via-cypher/SKILL.md) | Answer a findings, compliance, vulnerability, package, or attack-path question with one Cypher query on the `:Signal` nodes that hold them, instead of the consolidated read tools. |
 | [`subimage-mcp:build-cypher-query`](./skills/build-cypher-query/SKILL.md) | Construct a verified Cypher query against the SubImage Neo4j graph by exploring the schema, reusing model queries, and validating with bounded probes. |
 | [`subimage-mcp:create-custom-rule`](./skills/create-custom-rule/SKILL.md) | Draft, validate against the live tenant graph, and persist a tenant-local custom Cypher rule via `subimageCreateCustomRule`. |
+| [`subimage-mcp:fix-custom-rule`](./skills/fix-custom-rule/SKILL.md) | Find custom rules whose last run failed, explain why, reproduce the bad rows, and save a fix that passes a test run via `subimageUpdateCustomRule`. |
 | [`subimage-mcp:identify-iac-repositories`](./skills/identify-iac-repositories/SKILL.md) | Identify and rank the repositories that manage Infrastructure as Code, gated on enabled modules, grouped by confidence, and saved to memory on confirmation. |
 
 ## MCP server
