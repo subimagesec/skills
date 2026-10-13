@@ -69,6 +69,7 @@ After install, skills are namespaced under their plugin:
 /subimage-mcp:signals-via-cypher
 /subimage-mcp:build-cypher-query
 /subimage-mcp:create-custom-rule
+/subimage-mcp:fix-custom-rule
 /subimage-mcp:identify-iac-repositories
 ```
 
@@ -116,6 +117,7 @@ plugins/
       signals-via-cypher/SKILL.md
       build-cypher-query/SKILL.md
       create-custom-rule/SKILL.md
+      fix-custom-rule/SKILL.md
       identify-iac-repositories/SKILL.md
 ```
 

@@ -38,6 +38,8 @@ The `subimageReadMe` global tool guide is available. This skill assumes the role
 
 Call `subimageListRules()`. It returns every rule with `id`, `name`, `description`, `tags`, `findings_count`, `has_findings`, and `disabled`. There is **no** `framework` parameter; do not pass one. Keep rows where `has_findings` is true and `disabled` is false.
 
+Also note any rule whose `exec_status` is `ERROR` (the field is present on newer deployments). Its last run failed, so its findings may be out of date: say so next to that rule in the digest, with its `error_hint`, and point to the `subimage-mcp:fix-custom-rule` skill for custom rules.
+
 If none have findings, stop and tell the user: "No rules are producing findings right now. Modules may still be syncing, or no rules are enabled. Run `subimage-mcp:improve-subimage-coverage` to check coverage."
 
 ### 2. Group by tag
