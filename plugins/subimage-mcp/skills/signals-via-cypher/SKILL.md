@@ -1,6 +1,6 @@
 ---
 name: signals-via-cypher
-description: Answer questions about findings, compliance posture, vulnerabilities, CVEs, packages, and attack paths by querying the Signal nodes that hold them in Neo4j. Use when the user asks what is failing a rule, how a framework scores, which CVEs or packages are present, what is exploitable or KEV-listed, or how an attacker could reach an asset.
+description: Answer questions about findings, compliance posture, vulnerabilities, CVEs, packages, and attack paths by querying the Signal nodes that hold them in Neo4j, plus the native findings a connected security tool reported. Use when the user asks what is failing a rule, how a framework scores, which CVEs or packages are present, what is exploitable or KEV-listed, how an attacker could reach an asset, or what a named tool (SentinelOne, GuardDuty, Dependabot, ...) found.
 ---
 
 # Security Signals via Cypher
@@ -16,7 +16,9 @@ role" are each one Cypher query on a shape this skill gives you.
 ## Hard entry gate
 
 Load this skill for the current state of findings, compliance rule results,
-vulnerabilities, CVEs, packages, or attack paths.
+vulnerabilities, CVEs, packages, or attack paths, including findings or alerts
+the user attributes to a named security tool ("SentinelOne findings",
+"GuardDuty alerts", "Dependabot vulnerabilities").
 
 Do NOT load it for:
 
@@ -36,7 +38,8 @@ Do NOT load it for:
 **The shapes below are authoritative.** Do not call `subimageListModules`,
 `subimageListModuleSchemaNodes`, `subimageGetNodesSchema`, or
 `subimageSearchModelQueries` before querying them; go straight to
-`subimageRunCypher`.
+`subimageRunCypher`. The one exception is a tool's native findings, whose
+properties differ per provider: see "Findings a named tool reported".
 
 ## Required inputs
 
@@ -64,7 +67,7 @@ shared properties:
 | `signal_type` | `finding`, `vulnerability`, or `attack-path` |
 | `status` | `active` or `accepted`; accepted means a human accepted the risk |
 | `first_seen` | start of the current active occurrence |
-| `sources` | list of Cartography module names of the participating resources |
+| `sources` | list of the participating resources' `_module_name` values, each `cartography:<module>` |
 
 **Always filter `status`, and default to `status IN ['active','accepted']`.** That
 is the full current set, and it is what the product's own reads use. `active`
@@ -79,6 +82,64 @@ active. Filter them with `coalesce(a.status, 'active') IN ['active','accepted']`
 Only current Signals exist, whether active or accepted. There is no inactive
 Signal to find, so absence in the graph proves current absence, not that
 something never happened.
+
+## Findings a named tool reported
+
+A product name in the question is a data source, never a node label. Labels are
+provider-prefixed (`S1AppFinding`, `AWSGuardDutyFinding`,
+`GitHubDependabotAlert`), so matching `sentinelone` or `guardduty` against
+`labels(n)` matches nothing and reads as "no findings".
+
+Translate the product into its module id, `cartography:<module>`, where
+`<module>` is the module name `subimageListModules` reports (`sentinelone`,
+`crowdstrike`, `socketdev`). A product that belongs to a larger platform rides
+that platform's module: GuardDuty and Inspector are `cartography:aws`, Dependabot
+is `cartography:github`. Every node a module loads carries that id in
+`_module_name`.
+
+A tool's findings can sit in two places, and "what did SentinelOne find" means
+both:
+
+- **native findings**: the tool's own finding nodes, as the tool reported them.
+  Most carry the shared `Risk` label. They are not Signals: no `Rule`, no
+  `sources`, and their `status` is the tool's own vocabulary, not
+  `active`/`accepted`.
+- **SubImage findings on the tool's resources**: Signals whose `sources`
+  contains the module id.
+
+Native findings, aggregated first because a tool can report tens of thousands:
+
+```cypher
+MATCH (n:Risk {_module_name: 'cartography:sentinelone'})
+RETURN [l IN labels(n) WHERE NOT l IN ['Risk', 'CVE']] AS labels,
+       n.severity AS severity, count(*) AS findings
+ORDER BY findings DESC
+LIMIT 50
+```
+
+That answers "how many" and "how bad". Severity is provider-defined (a string on
+some, a number on others), so report it as the tool spells it. To list or filter
+individual findings, call `subimageGetNodesSchema` on the label the summary
+returned for its exact property and relationship names, then select columns
+instead of returning whole nodes.
+
+Zero rows does not prove the tool found nothing: a tool's finding nodes may not
+carry `Risk`. Before answering "none", call
+`subimageListModuleSchemaNodes(module="<module>")` and query its finding label
+directly.
+
+SubImage findings that involve the tool's resources:
+
+```cypher
+MATCH (r:Rule)-[:PRODUCED]->(f:Finding:Signal)
+WHERE 'cartography:sentinelone' IN f.sources
+  AND f.status IN ['active', 'accepted']
+RETURN r.id AS rule, r.name AS rule_name, count(f) AS findings
+ORDER BY findings DESC, rule
+LIMIT 50
+```
+
+Answer with both halves, and say which one each number came from.
 
 ## Findings and compliance
 
@@ -450,6 +511,12 @@ not for display.
   endpoints. Go through the `AttackerCapacity`.
 - Re-running the query with a different limit to "check" a result that already
   answered the question.
+- Matching a product or vendor name against labels, e.g.
+  `toLower(labels(n)) CONTAINS 'sentinelone'`. A product is a module: filter
+  `_module_name` (native findings) or `sources` (Signals) on
+  `cartography:<module>`.
+- Answering a named tool's findings from the Signal layer alone. Most of what a
+  security tool reports is native findings, which are not Signals.
 
 ## Output
 
@@ -467,7 +534,10 @@ query rather than implying the page is the whole set.
   Findings were selected and limited, and the answer treats a null asset as an
   edgeless Finding rather than dropping the row.
 - One `subimageRunCypher` call answered it; two means the first was wrong or a
-  count follow-up was genuinely needed.
+  count follow-up was genuinely needed. A named tool's findings are the
+  exception: one native query and one Signal query.
+- A product name in the question was filtered as `cartography:<module>` on
+  `_module_name` or `sources`, never matched against a label.
 - A severity or KEV claim came from `CVEMetadata`, and a fix version from
   `TrivyFix` reached through this CVE's own finding, not from the Signal alone.
 
