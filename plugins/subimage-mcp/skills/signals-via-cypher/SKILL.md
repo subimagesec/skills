@@ -30,6 +30,9 @@ Do NOT load it for:
 - **remediation work**: issues and action items (`subimageListIssues`,
   `subimageGetIssue`, `subimageListVulnerabilityActionItems`).
 - **flat resource inventory** of one resource type: use `inventory-via-cypher`.
+- **a named security tool's own findings** ("SentinelOne findings", "GuardDuty
+  alerts"): those are the tool's native nodes, not Signals. Use
+  `inventory-via-cypher`, which maps the product to its native label.
 - **what-if scenario modeling**: `subimageGetScenarioCapabilities`, then
   `subimageCreateAttackPathScenario`.
 
@@ -64,7 +67,7 @@ shared properties:
 | `signal_type` | `finding`, `vulnerability`, or `attack-path` |
 | `status` | `active` or `accepted`; accepted means a human accepted the risk |
 | `first_seen` | start of the current active occurrence |
-| `sources` | list of Cartography module names of the participating resources |
+| `sources` | the participating resources' `_module_name` values, each `cartography:<module>`: which modules' resources the Signal touches, not which product detected it |
 
 **Always filter `status`, and default to `status IN ['active','accepted']`.** That
 is the full current set, and it is what the product's own reads use. `active`
