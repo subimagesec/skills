@@ -160,7 +160,7 @@ provider was renamed, which is why `:GKECluster` carries no `GCP` prefix.
 | Okta users | `:OktaUser` | `:UserAccount` |
 | SentinelOne findings | `:S1AppFinding` | `:CVE` |
 | GuardDuty findings | `:AWSGuardDutyFinding` | `:SecurityIssue` |
-| Inspector findings | `:AWSInspectorFinding` | `:CVE` or `:SecurityIssue`, by finding type |
+| Inspector findings | `:AWSInspectorFinding` | `:CVE` when `type` is `PACKAGE_VULNERABILITY`, `:SecurityIssue` when `NETWORK_REACHABILITY` |
 | Dependabot alerts | `:GitHubDependabotAlert` | `:SecurityIssue`, plus `:CVE` when it has one |
 
 Native properties worth filtering on, none of which the ontology projects for
@@ -179,6 +179,8 @@ every provider:
   (`is_kev`, `base_score`), as for any `:CVE` finding.
 - `:AWSGuardDutyFinding`: `title`, `type`, `severity` (numeric),
   `severity_label`.
+- `:AWSInspectorFinding`: `name`, `type`, `severity`, `status`, `cve_id`,
+  `fixavailable`, `exploitavailable`.
 - `:GitHubDependabotAlert`: `state`, `severity`.
 
 Native-label traps:
