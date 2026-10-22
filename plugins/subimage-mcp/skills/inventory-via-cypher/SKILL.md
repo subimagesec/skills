@@ -173,7 +173,8 @@ every provider:
 - `:GitHubRepository`: `fullname`, `primarylanguage`, `private`, `archived`,
   `defaultbranch`.
 - `:S1AppFinding`: `cve_id`, `severity`, `status`, `mitigation_status`,
-  `days_detected`.
+  `days_detected`. Its endpoint is `(:S1AppFinding)-[:AFFECTS]->(:S1Agent)`,
+  named by `computer_name`.
 - `:AWSGuardDutyFinding`: `title`, `type`, `severity` (numeric),
   `severity_label`.
 - `:GitHubDependabotAlert`: `state`, `severity`.
