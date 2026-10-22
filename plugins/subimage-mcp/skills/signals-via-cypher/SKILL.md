@@ -85,73 +85,65 @@ something never happened.
 
 ## Findings a named tool reported
 
-A product name in the question is a data source, never a node label. Labels are
-provider-prefixed (`S1AppFinding`, `AWSGuardDutyFinding`,
-`GitHubDependabotAlert`), so matching `sentinelone` or `guardduty` against
+A product name in the question is a data source, never a node label. Finding
+labels are provider-prefixed, so matching `sentinelone` or `guardduty` against
 `labels(n)` matches nothing and reads as "no findings".
 
-Translate the product into its module id, `cartography:<module>`, where
-`<module>` is the module name `subimageListModules` reports (`sentinelone`,
-`crowdstrike`, `socketdev`). A product that belongs to a larger platform rides
-that platform's module: GuardDuty and Inspector are `cartography:aws`, Dependabot
-is `cartography:github`. Every node a module loads carries that id in
-`_module_name`.
+A tool's own findings are **native** nodes it reported, not Signals: no `Rule`,
+no `sources`, and their `status` and `severity` are the tool's own vocabulary.
+The Signal `status` filter and the `CVEMetadata` severity rule below do not apply
+to them.
 
-A tool's findings can sit in two places, and "what did SentinelOne find" means
-both:
+**When you know the product's finding label, query it directly: one call.** For
+example (not an exhaustive list):
 
-- **native findings**: the tool's own finding nodes, as the tool reported them.
-  Most carry the shared `Risk` label. They are not Signals: no `Rule`, no
-  `sources`, and their `status` is the tool's own vocabulary, not
-  `active`/`accepted`.
-- **SubImage findings on the tool's resources**: Signals whose `sources`
-  contains the module id.
-
-Native findings, aggregated first because a tool can report tens of thousands.
-Substitute the mapped module id for `<module>` in both queries below:
+| Product | Finding label |
+|---|---|
+| SentinelOne | `S1AppFinding` |
+| GuardDuty | `AWSGuardDutyFinding` |
+| Inspector | `AWSInspectorFinding` |
+| Dependabot | `GitHubDependabotAlert` |
 
 ```cypher
-MATCH (n:Risk {_module_name: 'cartography:<module>'})
-RETURN [l IN labels(n) WHERE NOT l IN ['Risk', 'CVE']] AS labels,
-       n.severity AS severity, count(*) AS findings
+MATCH (n:S1AppFinding)
+RETURN n.severity AS severity, count(*) AS findings
 ORDER BY findings DESC
-LIMIT 50
 ```
 
-That answers "how many" and "how bad" for the findings that carry `Risk`.
-Severity is provider-defined (a string on some, a number on others), so report
-it as the tool spells it.
+Severity is provider-defined (a string on some, a number on others), so report it
+as the tool spells it. To list or filter individual findings, call
+`subimageGetNodesSchema` on the label for its exact property and relationship
+names, then select columns instead of returning whole nodes.
 
-`Risk` is a shared label, not a guarantee: a module can also load finding nodes
-without it, and the summary silently leaves those out. Before presenting the
-total as complete, or answering "none" on zero rows, call
-`subimageListModuleSchemaNodes(module="<module>")`. Any finding label it lists
-that the summary did not return is a finding type without `Risk`; count it with
-a direct label query (`MATCH (n:<Label>) RETURN count(n)`) and add it to the
-answer.
-
-When products share a module, the module id alone is not the answer: GuardDuty
-and Inspector are both `cartography:aws`, so the summary returns
-`AWSGuardDutyFinding` and `AWSInspectorFinding` side by side. Keep only the
-label that belongs to the product the user named and filter on it
-(`MATCH (n:AWSInspectorFinding)`), rather than reporting the whole module.
-
-To list or filter individual findings, call `subimageGetNodesSchema` on the
-label for its exact property and relationship names, then select columns
-instead of returning whole nodes.
-
-SubImage findings that involve the tool's resources:
+**When you do not know the label**, discover it through the module. Every node a
+module loads carries `_module_name = 'cartography:<module>'`, where `<module>` is
+the name `subimageListModules` reports (for example `sentinelone`,
+`crowdstrike`, `socketdev`). A product inside a larger platform rides that
+platform's module: GuardDuty and Inspector are both `cartography:aws`, Dependabot
+is `cartography:github`. Most native findings carry the shared `Risk` label:
 
 ```cypher
-MATCH (r:Rule)-[:PRODUCED]->(f:Finding:Signal)
-WHERE 'cartography:<module>' IN f.sources
-  AND f.status IN ['active', 'accepted']
-RETURN r.id AS rule, r.name AS rule_name, count(f) AS findings
-ORDER BY findings DESC, rule
-LIMIT 50
+MATCH (n:Risk {_module_name: 'cartography:sentinelone'})
+UNWIND labels(n) AS label
+WITH label, count(*) AS findings
+WHERE NOT label IN ['Risk', 'CVE']
+RETURN label, findings
+ORDER BY findings DESC
 ```
 
-Answer with both halves, and say which one each number came from.
+Then keep only the label that belongs to the product the user named: on a shared
+module the result lists several products side by side.
+
+If that returns nothing, the tool's findings may not carry `Risk`: call
+`subimageListModuleSchemaNodes(module="<module>")` to find its finding label
+before answering "none". `Risk` is common but not guaranteed, so do not present
+a module-wide `Risk` count as everything an unfamiliar tool reported.
+
+A SubImage Signal is a different question. Its `sources` records which modules'
+resources it touches, not which product detected it, so
+`'cartography:aws' IN f.sources` matches every AWS rule, not GuardDuty. Query
+Signals by source only when the user asks what SubImage flagged on that tool's
+assets.
 
 ## Findings and compliance
 
@@ -473,7 +465,8 @@ not for display.
 
 - One self-contained read-only statement per `subimageRunCypher` call. No `//`
   comments, no parameters, no semicolon.
-- Always filter `status`, defaulting to `['active','accepted']`.
+- Always filter a Signal's `status`, defaulting to `['active','accepted']`.
+  A named tool's native findings are not Signals and take no such filter.
 - **`subimageRunCypher` returns at most 100 rows, whatever `LIMIT` you write.**
   The server takes `min(its cap, your limit)`, so you can lower the ceiling but
   never raise it. It also returns `total_count`, the true size. Size any query
@@ -524,11 +517,10 @@ not for display.
 - Re-running the query with a different limit to "check" a result that already
   answered the question.
 - Matching a product or vendor name against labels, e.g.
-  `any(l IN labels(n) WHERE toLower(l) CONTAINS 'sentinelone')`. A product is a module: filter
-  `_module_name` (native findings) or `sources` (Signals) on
-  `cartography:<module>`.
-- Answering a named tool's findings from the Signal layer alone. Most of what a
-  security tool reports is native findings, which are not Signals.
+  `any(l IN labels(n) WHERE toLower(l) CONTAINS 'sentinelone')`. Query the
+  product's finding label, or discover it through `_module_name`.
+- Answering a named tool's findings from the Signal layer. What a security tool
+  reports is native findings, which are not Signals.
 
 ## Output
 
@@ -539,20 +531,19 @@ query rather than implying the page is the whole set.
 
 ## Verification
 
-- The query filtered `status`, and narrowed to `active` alone only on purpose.
+- A Signal query filtered `status`, and narrowed to `active` alone only on purpose.
 - The query cannot produce more than 100 rows, or the answer quotes
   `total_count` instead of presenting the page as the whole set.
 - Any Finding-to-asset traversal is an `OPTIONAL MATCH` applied after the
   Findings were selected and limited, and the answer treats a null asset as an
   edgeless Finding rather than dropping the row.
 - One `subimageRunCypher` call answered it; two means the first was wrong or a
-  count follow-up was genuinely needed. A named tool's findings are the
-  exception: one native summary, one Signal query, and the
-  `subimageListModuleSchemaNodes` check, plus one direct-label count for each
-  finding label the summary missed.
-- A product name in the question was filtered as `cartography:<module>` on
-  `_module_name` or `sources`, never matched against a label.
-- A severity or KEV claim came from `CVEMetadata`, and a fix version from
+  count follow-up was genuinely needed. A named tool whose label was unknown can
+  take one discovery query first, and a schema lookup only when that found
+  nothing.
+- A product name was resolved to its finding label, never matched against
+  labels as text.
+- A vulnerability Signal's severity or KEV claim came from `CVEMetadata`, and a fix version from
   `TrivyFix` reached through this CVE's own finding, not from the Signal alone.
 
 ## References
