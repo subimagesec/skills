@@ -1,6 +1,6 @@
 ---
 name: signals-via-cypher
-description: Answer questions about findings, compliance posture, vulnerabilities, CVEs, packages, and attack paths by querying the Signal nodes that hold them in Neo4j, plus the native findings a connected security tool reported. Use when the user asks what is failing a rule, how a framework scores, which CVEs or packages are present, what is exploitable or KEV-listed, how an attacker could reach an asset, or what a named tool (SentinelOne, GuardDuty, Dependabot, ...) found.
+description: Answer questions about findings, compliance posture, vulnerabilities, CVEs, packages, and attack paths by querying the Signal nodes that hold them in Neo4j. Use when the user asks what is failing a rule, how a framework scores, which CVEs or packages are present, what is exploitable or KEV-listed, or how an attacker could reach an asset.
 ---
 
 # Security Signals via Cypher
@@ -16,9 +16,7 @@ role" are each one Cypher query on a shape this skill gives you.
 ## Hard entry gate
 
 Load this skill for the current state of findings, compliance rule results,
-vulnerabilities, CVEs, packages, or attack paths, including findings or alerts
-the user attributes to a named security tool ("SentinelOne findings",
-"GuardDuty alerts", "Dependabot vulnerabilities").
+vulnerabilities, CVEs, packages, or attack paths.
 
 Do NOT load it for:
 
@@ -32,14 +30,16 @@ Do NOT load it for:
 - **remediation work**: issues and action items (`subimageListIssues`,
   `subimageGetIssue`, `subimageListVulnerabilityActionItems`).
 - **flat resource inventory** of one resource type: use `inventory-via-cypher`.
+- **a named security tool's own findings** ("SentinelOne findings", "GuardDuty
+  alerts"): those are the tool's native nodes, not Signals. Use
+  `inventory-via-cypher`, which maps the product to its native label.
 - **what-if scenario modeling**: `subimageGetScenarioCapabilities`, then
   `subimageCreateAttackPathScenario`.
 
 **The shapes below are authoritative.** Do not call `subimageListModules`,
 `subimageListModuleSchemaNodes`, `subimageGetNodesSchema`, or
 `subimageSearchModelQueries` before querying them; go straight to
-`subimageRunCypher`. The one exception is a tool's native findings, whose
-properties differ per provider: see "Findings a named tool reported".
+`subimageRunCypher`.
 
 ## Required inputs
 
@@ -67,7 +67,7 @@ shared properties:
 | `signal_type` | `finding`, `vulnerability`, or `attack-path` |
 | `status` | `active` or `accepted`; accepted means a human accepted the risk |
 | `first_seen` | start of the current active occurrence |
-| `sources` | list of the participating resources' `_module_name` values, each `cartography:<module>` |
+| `sources` | the participating resources' `_module_name` values, each `cartography:<module>`: which modules' resources the Signal touches, not which product detected it |
 
 **Always filter `status`, and default to `status IN ['active','accepted']`.** That
 is the full current set, and it is what the product's own reads use. `active`
@@ -82,68 +82,6 @@ active. Filter them with `coalesce(a.status, 'active') IN ['active','accepted']`
 Only current Signals exist, whether active or accepted. There is no inactive
 Signal to find, so absence in the graph proves current absence, not that
 something never happened.
-
-## Findings a named tool reported
-
-A product name in the question is a data source, never a node label. Finding
-labels are provider-prefixed, so matching `sentinelone` or `guardduty` against
-`labels(n)` matches nothing and reads as "no findings".
-
-A tool's own findings are **native** nodes it reported, not Signals: no `Rule`,
-no `sources`, and their `status` and `severity` are the tool's own vocabulary.
-The Signal `status` filter and the `CVEMetadata` severity rule below do not apply
-to them.
-
-**When you know the product's finding label, query it directly: one call.** For
-example (not an exhaustive list):
-
-| Product | Finding label |
-|---|---|
-| SentinelOne | `S1AppFinding` |
-| GuardDuty | `AWSGuardDutyFinding` |
-| Inspector | `AWSInspectorFinding` |
-| Dependabot | `GitHubDependabotAlert` |
-
-```cypher
-MATCH (n:S1AppFinding)
-RETURN n.severity AS severity, count(*) AS findings
-ORDER BY findings DESC
-```
-
-Severity is provider-defined (a string on some, a number on others), so report it
-as the tool spells it. To list or filter individual findings, call
-`subimageGetNodesSchema` on the label for its exact property and relationship
-names, then select columns instead of returning whole nodes.
-
-**When you do not know the label**, discover it through the module. Every node a
-module loads carries `_module_name = 'cartography:<module>'`, where `<module>` is
-the name `subimageListModules` reports (for example `sentinelone`,
-`crowdstrike`, `socketdev`). A product inside a larger platform rides that
-platform's module: GuardDuty and Inspector are both `cartography:aws`, Dependabot
-is `cartography:github`. Most native findings carry the shared `Risk` label:
-
-```cypher
-MATCH (n:Risk {_module_name: 'cartography:sentinelone'})
-UNWIND labels(n) AS label
-WITH label, count(*) AS findings
-WHERE NOT label IN ['Risk', 'CVE']
-RETURN label, findings
-ORDER BY findings DESC
-```
-
-Then keep only the label that belongs to the product the user named: on a shared
-module the result lists several products side by side.
-
-If that returns nothing, the tool's findings may not carry `Risk`: call
-`subimageListModuleSchemaNodes(module="<module>")` to find its finding label
-before answering "none". `Risk` is common but not guaranteed, so do not present
-a module-wide `Risk` count as everything an unfamiliar tool reported.
-
-A SubImage Signal is a different question. Its `sources` records which modules'
-resources it touches, not which product detected it, so
-`'cartography:aws' IN f.sources` matches every AWS rule, not GuardDuty. Query
-Signals by source only when the user asks what SubImage flagged on that tool's
-assets.
 
 ## Findings and compliance
 
@@ -465,8 +403,7 @@ not for display.
 
 - One self-contained read-only statement per `subimageRunCypher` call. No `//`
   comments, no parameters, no semicolon.
-- Always filter a Signal's `status`, defaulting to `['active','accepted']`.
-  A named tool's native findings are not Signals and take no such filter.
+- Always filter `status`, defaulting to `['active','accepted']`.
 - **`subimageRunCypher` returns at most 100 rows, whatever `LIMIT` you write.**
   The server takes `min(its cap, your limit)`, so you can lower the ceiling but
   never raise it. It also returns `total_count`, the true size. Size any query
@@ -516,11 +453,6 @@ not for display.
   endpoints. Go through the `AttackerCapacity`.
 - Re-running the query with a different limit to "check" a result that already
   answered the question.
-- Matching a product or vendor name against labels, e.g.
-  `any(l IN labels(n) WHERE toLower(l) CONTAINS 'sentinelone')`. Query the
-  product's finding label, or discover it through `_module_name`.
-- Answering a named tool's findings from the Signal layer. What a security tool
-  reports is native findings, which are not Signals.
 
 ## Output
 
@@ -531,19 +463,15 @@ query rather than implying the page is the whole set.
 
 ## Verification
 
-- A Signal query filtered `status`, and narrowed to `active` alone only on purpose.
+- The query filtered `status`, and narrowed to `active` alone only on purpose.
 - The query cannot produce more than 100 rows, or the answer quotes
   `total_count` instead of presenting the page as the whole set.
 - Any Finding-to-asset traversal is an `OPTIONAL MATCH` applied after the
   Findings were selected and limited, and the answer treats a null asset as an
   edgeless Finding rather than dropping the row.
 - One `subimageRunCypher` call answered it; two means the first was wrong or a
-  count follow-up was genuinely needed. A named tool whose label was unknown can
-  take one discovery query first, and a schema lookup only when that found
-  nothing.
-- A product name was resolved to its finding label, never matched against
-  labels as text.
-- A vulnerability Signal's severity or KEV claim came from `CVEMetadata`, and a fix version from
+  count follow-up was genuinely needed.
+- A severity or KEV claim came from `CVEMetadata`, and a fix version from
   `TrivyFix` reached through this CVE's own finding, not from the Signal alone.
 
 ## References

@@ -1,6 +1,6 @@
 ---
 name: inventory-via-cypher
-description: Answer flat resource-inventory questions - list, count, filter, sort, or paginate ONE resource type - by mapping the requested type to its Neo4j ontology label, or to the provider-native label when the user names a specific product, then running a single Cypher query. Use when the user asks "list", "how many", "show me all", "which of our <resource type>", or names a product such as "our RDS instances", "our EKS clusters", or "our GitHub repositories", across any cloud, SaaS, or VCS provider.
+description: Answer flat resource-inventory questions - list, count, filter, sort, or paginate ONE resource type - by mapping the requested type to its Neo4j ontology label, or to the provider-native label when the user names a specific product, then running a single Cypher query. Use when the user asks "list", "how many", "show me all", "which of our <resource type>", or names a product such as "our RDS instances", "our EKS clusters", or "our GitHub repositories", across any cloud, SaaS, or VCS provider. Also use when the user asks for the findings or alerts a named security tool reported, such as "our SentinelOne findings" or "GuardDuty alerts".
 ---
 
 # Inventory via Cypher
@@ -45,8 +45,11 @@ Do NOT load it for:
 
 - relationships, reachability, access, blast radius, root cause, privilege
   chains, or anything spanning two resource types (use `build-cypher-query`);
-- CVEs, packages, fixability, findings, or attack paths: those are `:Signal`
-  nodes with their own shapes (use `signals-via-cypher`);
+- CVEs, packages, fixability, SubImage findings, or attack paths: those are
+  `:Signal` nodes with their own shapes (use `signals-via-cypher`). The
+  exception is a named security tool's own findings ("SentinelOne findings",
+  "GuardDuty alerts"): those are the tool's native nodes, so they stay here as a
+  named product;
 - issues and action items (`subimageListIssues`);
 - which compliance rules and frameworks exist or are enabled
   (`subimageListRules`, `subimageListFrameworks`).
@@ -155,6 +158,10 @@ provider was renamed, which is why `:GKECluster` carries no `GCP` prefix.
 | Azure VMs | `:AzureVirtualMachine` | `:ComputeInstance` |
 | Azure SQL databases | `:AzureSQLDatabase` | `:Database` |
 | Okta users | `:OktaUser` | `:UserAccount` |
+| SentinelOne findings | `:S1AppFinding` | `:CVE` |
+| GuardDuty findings | `:AWSGuardDutyFinding` | `:SecurityIssue` |
+| Inspector findings | `:AWSInspectorFinding` | `:CVE` or `:SecurityIssue`, by finding type |
+| Dependabot alerts | `:GitHubDependabotAlert` | `:SecurityIssue`, plus `:CVE` when it has one |
 
 Native properties worth filtering on, none of which the ontology projects for
 every provider:
@@ -165,6 +172,11 @@ every provider:
   `status`, `endpoint_public_access`, `authentication_mode`.
 - `:GitHubRepository`: `fullname`, `primarylanguage`, `private`, `archived`,
   `defaultbranch`.
+- `:S1AppFinding`: `cve_id`, `severity`, `status`, `mitigation_status`,
+  `days_detected`.
+- `:AWSGuardDutyFinding`: `title`, `type`, `severity` (numeric),
+  `severity_label`.
+- `:GitHubDependabotAlert`: `state`, `severity`.
 
 Native-label traps:
 
@@ -176,6 +188,12 @@ Native-label traps:
   `defaultbranch`, `primarylanguage`.
 - Azure object storage is `:AzureStorageBlobContainer`. `:AzureStorageAccount` is
   the parent account and carries no ontology label.
+- A product name is never a label substring. Labels use the provider's own
+  prefix, so `sentinelone` matches nothing: SentinelOne is `:S1AppFinding`.
+- A security tool's findings are not Signals. Their `status` and `severity` are
+  the tool's own vocabulary, so filter on its values (a SentinelOne `severity`
+  of `'CRITICAL'`, a Dependabot `state` of `'open'`), not on
+  `active`/`accepted`.
 
 When the named product has no row here, resolve its label with ONE
 `subimageGetNodesSchema` or `subimageListModuleSchemaNodes` call, then query. One
