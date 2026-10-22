@@ -118,7 +118,13 @@ LIMIT 50
 ```
 
 That answers "how many" and "how bad". Severity is provider-defined (a string on
-some, a number on others), so report it as the tool spells it. To list or filter
+some, a number on others), so report it as the tool spells it.
+
+When products share a module, the module id alone is not the answer: GuardDuty
+and Inspector are both `cartography:aws`, so the summary returns
+`AWSGuardDutyFinding` and `AWSInspectorFinding` side by side. Keep only the
+label that belongs to the product the user named and filter on it
+(`MATCH (n:AWSInspectorFinding)`), rather than reporting the whole module. To list or filter
 individual findings, call `subimageGetNodesSchema` on the label the summary
 returned for its exact property and relationship names, then select columns
 instead of returning whole nodes.
