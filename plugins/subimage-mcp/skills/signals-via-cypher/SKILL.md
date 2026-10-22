@@ -107,38 +107,44 @@ both:
 - **SubImage findings on the tool's resources**: Signals whose `sources`
   contains the module id.
 
-Native findings, aggregated first because a tool can report tens of thousands:
+Native findings, aggregated first because a tool can report tens of thousands.
+Substitute the mapped module id for `<module>` in both queries below:
 
 ```cypher
-MATCH (n:Risk {_module_name: 'cartography:sentinelone'})
+MATCH (n:Risk {_module_name: 'cartography:<module>'})
 RETURN [l IN labels(n) WHERE NOT l IN ['Risk', 'CVE']] AS labels,
        n.severity AS severity, count(*) AS findings
 ORDER BY findings DESC
 LIMIT 50
 ```
 
-That answers "how many" and "how bad". Severity is provider-defined (a string on
-some, a number on others), so report it as the tool spells it.
+That answers "how many" and "how bad" for the findings that carry `Risk`.
+Severity is provider-defined (a string on some, a number on others), so report
+it as the tool spells it.
+
+`Risk` is a shared label, not a guarantee: a module can also load finding nodes
+without it, and the summary silently leaves those out. Before presenting the
+total as complete, or answering "none" on zero rows, call
+`subimageListModuleSchemaNodes(module="<module>")`. Any finding label it lists
+that the summary did not return is a finding type without `Risk`; count it with
+a direct label query (`MATCH (n:<Label>) RETURN count(n)`) and add it to the
+answer.
 
 When products share a module, the module id alone is not the answer: GuardDuty
 and Inspector are both `cartography:aws`, so the summary returns
 `AWSGuardDutyFinding` and `AWSInspectorFinding` side by side. Keep only the
 label that belongs to the product the user named and filter on it
-(`MATCH (n:AWSInspectorFinding)`), rather than reporting the whole module. To list or filter
-individual findings, call `subimageGetNodesSchema` on the label the summary
-returned for its exact property and relationship names, then select columns
-instead of returning whole nodes.
+(`MATCH (n:AWSInspectorFinding)`), rather than reporting the whole module.
 
-Zero rows does not prove the tool found nothing: a tool's finding nodes may not
-carry `Risk`. Before answering "none", call
-`subimageListModuleSchemaNodes(module="<module>")` and query its finding label
-directly.
+To list or filter individual findings, call `subimageGetNodesSchema` on the
+label for its exact property and relationship names, then select columns
+instead of returning whole nodes.
 
 SubImage findings that involve the tool's resources:
 
 ```cypher
 MATCH (r:Rule)-[:PRODUCED]->(f:Finding:Signal)
-WHERE 'cartography:sentinelone' IN f.sources
+WHERE 'cartography:<module>' IN f.sources
   AND f.status IN ['active', 'accepted']
 RETURN r.id AS rule, r.name AS rule_name, count(f) AS findings
 ORDER BY findings DESC, rule
@@ -518,7 +524,7 @@ not for display.
 - Re-running the query with a different limit to "check" a result that already
   answered the question.
 - Matching a product or vendor name against labels, e.g.
-  `toLower(labels(n)) CONTAINS 'sentinelone'`. A product is a module: filter
+  `any(l IN labels(n) WHERE toLower(l) CONTAINS 'sentinelone')`. A product is a module: filter
   `_module_name` (native findings) or `sources` (Signals) on
   `cartography:<module>`.
 - Answering a named tool's findings from the Signal layer alone. Most of what a
@@ -541,7 +547,9 @@ query rather than implying the page is the whole set.
   edgeless Finding rather than dropping the row.
 - One `subimageRunCypher` call answered it; two means the first was wrong or a
   count follow-up was genuinely needed. A named tool's findings are the
-  exception: one native query and one Signal query.
+  exception: one native summary, one Signal query, and the
+  `subimageListModuleSchemaNodes` check, plus one direct-label count for each
+  finding label the summary missed.
 - A product name in the question was filtered as `cartography:<module>` on
   `_module_name` or `sources`, never matched against a label.
 - A severity or KEV claim came from `CVEMetadata`, and a fix version from
