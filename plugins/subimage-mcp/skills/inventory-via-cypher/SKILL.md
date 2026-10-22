@@ -175,6 +175,8 @@ every provider:
 - `:S1AppFinding`: `cve_id`, `severity`, `status`, `mitigation_status`,
   `days_detected`. Its endpoint is `(:S1AppFinding)-[:AFFECTS]->(:S1Agent)`,
   named by `computer_name`.
+  KEV and CVSS come from `(:CVEMetadata)-[:ENRICHES]->(:S1AppFinding)`
+  (`is_kev`, `base_score`), as for any `:CVE` finding.
 - `:AWSGuardDutyFinding`: `title`, `type`, `severity` (numeric),
   `severity_label`.
 - `:GitHubDependabotAlert`: `state`, `severity`.
