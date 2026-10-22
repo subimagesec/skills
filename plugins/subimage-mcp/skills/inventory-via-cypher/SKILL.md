@@ -190,6 +190,11 @@ Native-label traps:
   the parent account and carries no ontology label.
 - A product name is never a label substring. Labels use the provider's own
   prefix, so `sentinelone` matches nothing: SentinelOne is `:S1AppFinding`.
+- GuardDuty and Inspector findings belong to the account they are in through
+  `MEMBER`: `(:AWSAccount)-[:MEMBER]->(n:AWSGuardDutyFinding)`. Their `RESOURCE`
+  edge points at the account that collected them, which for a delegated
+  administrator holds every member's findings, so the `:Tenant` scoping rule
+  below would return the wrong account's.
 - A security tool's findings are not Signals. Their `status` and `severity` are
   the tool's own vocabulary, so filter on its values (a SentinelOne `severity`
   of `'CRITICAL'`, a Dependabot `state` of `'open'`), not on
@@ -317,6 +322,8 @@ LIMIT 100
   the `_ont_*` properties are still on the node for whatever the ontology covers.
 - Scope to one account, subscription, or project with the `:Tenant` edge:
   `MATCH (t:Tenant {_ont_name: 'prod'})-[:RESOURCE]->(n:ComputeInstance)`.
+  GuardDuty and Inspector findings are the exception: scope them through
+  `MEMBER` (see the native-label traps).
 
 ## Anti-patterns
 
