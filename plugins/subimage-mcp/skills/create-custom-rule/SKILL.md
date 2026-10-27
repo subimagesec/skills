@@ -1,165 +1,238 @@
 ---
 name: create-custom-rule
-description: Draft, validate, and persist a tenant-local SubImage custom Cypher rule via the `subimageCreateCustomRule` MCP tool. Use when the user asks to "create a rule", "add a custom finding", "write a Cypher rule for X", or wants to detect a misconfiguration not covered by the built-in rules.
+description: Design, validate, and save a tenant-local SubImage custom Cypher rule, or fix and update an existing one, with `subimageCreateCustomRule` and `subimageUpdateCustomRule`. Use when the user asks to "create a rule", "write a Cypher rule for X", "add a custom finding", "edit my custom rule", "fix my failing rule", "track this as a rule", or wants an investigation's result watched from now on.
 ---
 
-# Create a SubImage custom rule
+# Create or update a SubImage custom rule
 
-Help an operator author and persist a new SubImage custom security rule end-to-end from chat. The skill ends when the rule is saved and the user knows when to expect findings.
-
-The deliverable is one successful `subimageCreateCustomRule` call. Findings are produced on the next scheduled findings build, not inline.
+Turn what the user wants to act on into a rule whose findings land where that action happens. The skill ends when the rule is saved, or the user declines it, and the user knows what the next findings build will produce.
 
 ## What this does
 
-A SubImage custom rule is a tenant-local Cartography rule. It contains:
+A custom rule is a detection the tenant writes in Cypher. After every findings build, each row its queries return becomes a finding on the Rules page. Findings then go through the same acceptance, history, notifications, and issue triage as a built-in rule's.
 
-- one or more **Facts**, each with a Cypher detection query (`cypher_query`) plus a graph-visualization query (`cypher_visual_query`),
-- an `output_fields` list describing every column the detection query returns,
-- optional `references` (CIS controls, vendor advisories, etc.),
-- tags for categorization.
+A rule is not a form to fill in. Every field is a lever on how rows turn into findings, and the right setting follows from what someone will do with a finding once it exists. Read **Design the rule** and **How fields shape findings** before drafting. Most bad rules come from skipping them.
+
+Uses `subimageListRules`, `subimageRunCypher`, `subimageCreateCustomRule`, `subimageUpdateCustomRule`, and the sibling skill [`build-cypher-query`](../build-cypher-query/SKILL.md) for schema discovery.
 
 ## When to use
 
-✅ The user wants to detect a misconfiguration not already covered by SubImage's built-in rules.
-✅ The user says "create a rule", "add a custom finding", or "write a Cypher rule for X".
-✅ The detection logic can be expressed as a read-only Cypher query over the tenant graph.
+✅ The user wants to track a condition over time that no built-in or existing custom rule covers.
+✅ An investigation turned up a problem that can come back, and the user accepted an offer to keep watching for it.
+✅ The user wants to change a custom rule, or `subimageListRules(exec_status="ERROR")` shows one failing.
+✅ The user says "create a rule", "write a Cypher rule for X", "flag every X that Y", or "fix my rule".
 
-❌ The user wants to edit or delete an existing custom rule. Use the REST API (`PUT` / `DELETE /findings/custom-rule/{id}`); no MCP equivalent today.
-❌ The user wants a one-off finding without a backing rule. Findings always come from a rule.
-❌ The user wants to author an upstream Cartography rule shipped to every tenant. That is a different workflow outside this skill.
+❌ A one-off question about the graph. Use `build-cypher-query` and `subimageRunCypher`; a rule is for something to track.
+❌ Changing a built-in rule. Built-in rules cannot be updated. Write a custom rule, or disable the built-in from its rule page.
+❌ Deleting a custom rule. There is no MCP tool for it; the user deletes it from the rule's page.
 
 ## Required inputs
 
-Ask the user inline for anything missing before drafting Cypher:
+Only the intent: what the user will do with a finding. Ask about it only when the request could serve more than one action (see **Start from the action**). Derive the id, name, description, and tags yourself and propose them. In chat, the approval card shows them before anything is written.
 
-- **Rule intent in plain English**: what does a finding mean? e.g. "RDS instances without storage encryption".
-- **Target Cartography module(s)**: which provider does this query? (`AWS`, `GCP`, `Azure`, `GitHub`, `Okta`, `Kubernetes`, etc.). If the detection spans providers, split into one Fact per provider; one rule may contain several Facts.
-- **Candidate rule id**: kebab-case, tenant-unique. Mirror the naming of existing rules.
-- **Tags**: short, lowercased, e.g. `aws`, `data-protection`. The `custom` tag is reserved; if the user requests it, drop it silently.
+## Design the rule
 
-## Non-negotiables for Cypher
+### Start from the action
 
-Two rules cannot be broken. The server rejects rule submissions that violate them.
+The intent is the whole design. What someone will do with a finding decides what the finding is anchored on and how it splits. Two rules over the same graph show it:
 
-1. **Every `RETURN` expression in `cypher_query` must alias to a name listed in `output_fields`, using explicit `AS`.** Example: `RETURN db.id AS id, db.name AS name, db.region AS region`. `RETURN *` and unaliased returns are rejected. `output_fields` must include one entry per alias, with `type` in `{"string", "number", "boolean"}`.
-2. **`cypher_visual_query` returns whole nodes and relationships, not scalar properties.** Example: `MATCH (db:AWSRDSInstance) WHERE db.publicly_accessible = true RETURN db LIMIT 100`. This query powers graph visualization in the UI.
+- **"Containers with critical CVEs."** The finding is about the container. It makes questions about that container easy to answer: is it high risk, is its access to other resources too broad, which paths lead from it. Anchor on the container. Its CVEs are evidence in columns outside the identity, so any number of them is one finding, and that finding becomes one issue about the container.
+- **"Critical CVEs on a container."** The finding is about each CVE where it appears. It makes it easy to split the work into a ticket per CVE and to track whether each one is fixed. The CVE goes in the identity, so each CVE is its own finding and its own issue, and each closes when that CVE is fixed.
 
-Both queries must contain a `LIMIT` clause and use `MATCH` / `RETURN` only. Write operations (`CREATE`, `MERGE`, `DELETE`, `SET`, `REMOVE`) are rejected.
+Both read the same nodes and can match the same rows. They differ only in intent, and the intent determines the anchor, the identity, and the issues that come downstream. Name the action before choosing a single field.
+
+### Anchor on what the action is about
+
+The affected asset is the node a person opens from the finding, the node issue triage scopes and assigns, and the starting point for any investigation of reach. Pick the node the intended action works on, not merely the first node the query matches.
+
+### Identity is the grain the action needs, written down
+
+`identity_fields` are the columns that make a row the same finding as last build. Include the columns that are part of the problem, and the stable properties that identify the underlying object without changing because the problem is present.
+
+- **Too broad:** a column that churns with the object, such as a count, a timestamp, or the list of current causes, closes and reopens the finding every build. One issue becomes thousands of findings, and acceptance is lost each time.
+- **Too narrow:** distinct problems merge into one finding, and the rule loses the granularity it was meant to track.
+
+When a node's `id` is in the identity, its other properties add nothing: the id already pins the node.
+
+### Several facts answer one question
+
+A rule has one or more facts, each with its own query. Write several only when one question needs different queries to cover differently shaped graphs, such as one per provider. A different question is a different rule.
+
+## How fields shape findings
+
+Each distinct row a fact returns is one finding. The fields decide which rows count as the same finding, what it is attached to, and when the whole rule fails.
+
+1. **One bad row fails the whole rule.** The rule goes to `ERROR` and keeps its existing findings until it runs clean. A row is bad when:
+   - no `asset_label` node has its asset id, including a null id from an `OPTIONAL MATCH`;
+   - it shares its identity with another row but differs in another column.
+
+   Rows that are identical in every column collapse into one finding.
+
+2. **Each alias is a finding field.** A rule's columns are the union of its facts' aliases, so give the facts of one rule the same aliases for the same things.
+3. **Identity decides what is the same finding.** A finding carries over from one build to the next only while its rule id, fact id, identity columns, and their values all stay the same. A carried-over finding keeps its first-seen date and its acceptance, and records an update when a non-identity column or the affected asset changed. Anything else opens a new finding, and a finding that no longer appears closes into history. With `identity_fields` omitted, the identity is every returned column, so adding or removing a column replaces every finding.
+4. **The affected asset** is the node with label `asset_label` whose `id` is the `asset_id_field` column. The query must bind that label and return exactly `<var>.id` off it: `u.id AS id` works; `u.arn AS id` does not. Leave it out of the identity to let a finding survive its resource being rebuilt.
+5. **The display field** is the column a finding is shown as. Omitted or empty, it is the asset id.
+
+## Query craft
+
+- Treat `LIMIT` as a safety cap well above the real count. Past it, the build keeps an arbitrary subset of rows, and findings rotate from one build to the next.
+- Sort anything collected into a column, for example `apoc.coll.sort(collect(DISTINCT v.id))`. An unsorted list can come back in a different order and record an update on every build.
+- Filter out null ids when the asset comes from an `OPTIONAL MATCH`: `WHERE x.id IS NOT NULL`.
+- Use `DISTINCT`, or aggregate with `collect()`, when several graph paths reach the same answer.
+- Filter early on labels and properties, and bound variable-length paths. Otherwise the rule fails on time or memory.
+- Prefer ontology labels (`User` for a person across providers, `UserAccount` for each provider account, `Device`, `ComputeInstance`, `Container`) for cross-provider questions. Use provider labels when the question is about one provider.
+- `source` and `extra` are reserved and cannot be aliases.
+
+## What findings feed
+
+- Issue triage groups a rule's findings into issues. It reads the rule's name and description, every finding field, and the columns `account_id`, `project_id`, `provider`, and `resource_type` when present. Write the name and description for that reader as much as for people, and return those columns when the graph has them.
+- Custom rules do not feed attack paths or compliance frameworks.
+- The `custom` tag is reserved and stripped on save. Leave it out.
 
 ## Workflow
 
-Run the steps in order. Do not skip step 1.
+Run the steps in order. Every check happens before the save, inside this turn: a findings build runs long after the turn ends, and nothing brings you back to it.
 
-### Step 1: Confirm intent and check for collisions
+### Starting from an investigation
 
-Call `subimageListRules` to:
+When the rule comes out of an investigation, most of the design is already in the conversation. The user's concern is the intent, and the queries you ran are the first draft. Reshape them rather than starting over: an investigation query often returns counts, a top-N, or one row per path. A rule needs one row per finding at the grain the action needs, anchored on a node, under a generous `LIMIT`. Then continue from Step 1 with that action.
 
-- mirror naming and tag conventions used by existing rules,
-- confirm the candidate id is not already taken. A collision returns `error="conflict"` at submit time.
+### Step 1: State the design
 
-If the detection is unclear, ask the user one focused clarifying question before drafting Cypher. A bad detection wastes a full findings-build cycle.
+Before drafting, tell the user the action, then the anchor and grain it implies. For example: "to examine high-risk containers: one finding per container, anchored on the container" or "to ticket each CVE: one finding per CVE on each container". When the request could serve either action, ask which action they want. Do not ask which fields to fill in; they follow from the answer.
 
-### Step 2: Pick the Cartography module
+### Step 2: Check the id, or read the rule
 
-Pick the module(s) the rule queries: `AWS`, `GCP`, `Azure`, `GitHub`, `Okta`, `Kubernetes`, etc. The module drives which data the rule depends on at build time. For cross-provider detections, split into one Fact per provider.
+- **Create:** call `subimageListRules` and pick a kebab-case id that is unused across built-in and custom rules. Mirror the naming and tags of nearby rules.
+- **Update or fix:** call `subimageListRules(view="custom_definitions")` for the current definition. For a failing rule, `subimageListRules(exec_status="ERROR")` gives its `error_code`, `error`, and `error_hint`; start from those and the table in **Refusals**.
 
-### Step 3: Draft the queries
+### Step 3: Draft and probe with `subimageRunCypher`
 
-For each Fact, draft `cypher_query` and `cypher_visual_query` against the live tenant schema. If you need help discovering labels and properties, use the sibling skill [`build-cypher-query`](../build-cypher-query/SKILL.md) (it covers `subimageListModuleSchemaNodes`, `subimageGetNodesSchema`, and the agent-delegated builder).
+Use [`build-cypher-query`](../build-cypher-query/SKILL.md) to discover labels and properties. Then run probes against the live graph. `subimageRunCypher` returns at most 100 rows, but its `total_count` counts every matching row and ignores `LIMIT`.
 
-Constraints for `cypher_query`:
+- **Rows look right:** run the draft and read the rows.
+- **Count fits the cap:** if `total_count` is at or above your `LIMIT`, raise it.
+- **Grain holds:** compare rows with distinct identities. Wrap the draft without its `LIMIT`, for example `CALL { <draft> } RETURN count(*) AS rows, count(DISTINCT [<identity columns>]) AS findings`. A difference means two rows share an identity, which fails the rule unless they are identical.
+- **Anchor resolves:** every row has a non-null asset id.
+- **Zero rows:** run the query with its `WHERE` condition removed or inverted. If that returns the assets you expect, 0 is the correct answer for a condition that currently holds, as with "a bucket that must stay private". Say so rather than loosening the rule.
 
-- `RETURN` aliases match `output_fields` names exactly (see non-negotiable #1).
-- Include `LIMIT`, default `LIMIT 10000` to allow normal tenants while preventing pathological queries.
-- Prefer ontology labels (`User`, `Device`, `Identity`, `ComputeInstance`, ...) when the detection is cross-provider; provider-native labels otherwise.
+### Step 4: Assemble the body
 
-Constraints for `cypher_visual_query`:
+Rule: `id`, `name`, `description`, `tags`, `references` (each `{title, url}`), `allow_community_contribution` (default `false`; set `true` only on an explicit opt-in), `facts`.
 
-- Return whole nodes and relationships, not scalars (see non-negotiable #2).
-- `LIMIT 100` is the typical ceiling for the UI graph view.
-- Include enough graph context for an analyst to understand the finding.
+Fact: `id`, `name`, `description`, `cypher_query`, `cypher_visual_query`, `asset_label`, `asset_id_field`, optional `identity_fields`, optional `display_field`.
 
-### Step 4: Verify against the live tenant graph
+- `cypher_query` aliases every returned column with `AS`, has a `LIMIT`, and is read-only. `CREATE`, `MERGE`, `DELETE`, `SET`, `REMOVE`, and `LOAD CSV` are rejected.
+- `cypher_visual_query` is the same query with its last `RETURN` replaced by `RETURN *`, keeping the `LIMIT`. It draws the graph view and does not decide which rows become findings.
+- `identity_fields` and `display_field` name returned columns.
+- Do not send `output_fields`, `maturity`, or `cypher_count_query`.
 
-Run both `cypher_query` and `cypher_visual_query` via `subimageRunCypher` before submitting. Confirm:
+**Update:** send the whole rule back. `id` cannot change. Keep every fact `id` as it is, because a new fact id replaces that fact's findings. An omitted optional field resets to its default: `tags`, `references`, `identity_fields`, and `display_field` included.
 
-- the result count is plausible (not 0, not millions),
-- the returned rows make sense for the intended detection,
-- ontology and property assumptions hold for this tenant.
+Before an update changes a fact's identity, or the columns of a fact with no `identity_fields`, tell the user that fact's findings will close and reopen, and that acceptance and issue triage do not carry over. Changing other columns or the display field updates findings in place.
 
-If `cypher_query` returns 0 rows when the user expects findings, the rule will silently produce no findings after build. Iterate before submitting.
+### Step 5: Save
 
-### Step 5: Submit
+Call `subimageCreateCustomRule` or `subimageUpdateCustomRule` with `{"rule": <body>}`. The tool runs the draft the way the findings build will, against the graph as it is now, and refuses it when a query would fail. On a refusal, fix the body per **Refusals** and call again.
 
-Call `subimageCreateCustomRule` exactly once with a `CustomRuleRequest` payload. Example:
+In SubImage chat, a draft that passes waits on an approval card. Tell the user it is ready for their approval, and stop. Other MCP clients write immediately.
+
+### Step 6: Hand off
+
+Report the rule id, what one finding means in a sentence ("one finding per container with a critical CVE"), the row count from Step 3, and that findings appear on the next findings build. Point to the rule's page in SubImage for the user to check later.
+
+After fixing a failing rule, the successful save is the evidence: it ran the same detection the build runs. The rule shows `ERROR` until the next build, so say that rather than checking it again.
+
+## Refusals
+
+A refused save returns `MCPErrorResponse`:
+
+- `custom_rule_test_failed`: the message reads `fact '<id>': <code> (<error>). <hint>` for each failing fact.
+- `custom_rule_conflict`: the id is taken by a built-in or custom rule. Pick another.
+- `custom_rule_not_found`: the update names an id that is not a custom rule.
+- `cypher_validation_unavailable`: the check could not run. Retry shortly.
+
+Codes inside `custom_rule_test_failed`:
+
+| Code                       | Fix                                                                                                                                                                                                                                |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `invalid_fact`             | A save-time check failed: a missing `AS` alias or `LIMIT`, a write clause, an anchor that is not `<var>.id` off a node bound to `asset_label`, or identity or display fields that are not returned columns. The error names which. |
+| `cypher_error`             | Neo4j rejected the query. Run it with `subimageRunCypher` to see the full error.                                                                                                                                                   |
+| `affected_asset_not_found` | A row's asset id matches no `asset_label` node. Return `<var>.id` off the labeled variable and filter out nulls.                                                                                                                   |
+| `duplicate_signal_id`      | Two rows share an identity but differ elsewhere. Add the differing column to `identity_fields`, or collapse the rows with `DISTINCT` or `collect()`. Decide by the grain from Step 1.                                              |
+| `memory_limit_exceeded`    | Filter before aggregating and bound variable-length paths.                                                                                                                                                                         |
+
+Any other code is on SubImage's side. Tell the user to contact support.
+
+A query that times out in `subimageRunCypher` can still be saved, since the findings build has no time limit. Narrow it if you can.
+
+## Example
+
+"Any S3 bucket that becomes anonymously accessible should be a finding." The action is to fix or accept each bucket, so the finding is about the bucket, one per bucket. Its region can change without making it a different problem.
 
 ```json
 {
-  "id": "tenant-rds-without-encryption",
-  "name": "RDS instances without storage encryption",
-  "description": "Flags RDS instances missing storage encryption.",
-  "tags": ["aws", "data-protection"],
-  "facts": [
-    {
-      "id": "aws-rds-no-encryption",
-      "name": "AWS RDS without encryption",
-      "description": "RDS instances where storage_encrypted is false.",
-      "module": "AWS",
-      "cypher_query": "MATCH (db:AWSRDSInstance) WHERE db.storage_encrypted = false RETURN db.id AS id, db.db_instance_identifier AS name, db.region AS region LIMIT 10000",
-      "cypher_visual_query": "MATCH (db:AWSRDSInstance) WHERE db.storage_encrypted = false RETURN db LIMIT 100"
-    }
-  ],
-  "output_fields": [
-    {"name": "id", "type": "string"},
-    {"name": "name", "type": "string"},
-    {"name": "region", "type": "string"}
-  ],
-  "references": [],
-  "allow_community_contribution": false
+  "rule": {
+    "id": "s3-bucket-anonymous-access",
+    "name": "S3 buckets with anonymous access",
+    "description": "S3 buckets that anonymous principals can read or act on. Each finding is one bucket; fix the bucket policy or ACL, or accept the finding if the bucket is public on purpose.",
+    "tags": ["aws", "data-exposure"],
+    "references": [],
+    "allow_community_contribution": false,
+    "facts": [
+      {
+        "id": "s3-bucket-anonymous-access-0",
+        "name": "S3 buckets with anonymous access",
+        "description": "Buckets flagged as anonymously accessible or with anonymous actions allowed.",
+        "cypher_query": "MATCH (b:AWSS3Bucket) WHERE b.anonymous_access = true OR (b.anonymous_actions IS NOT NULL AND size(b.anonymous_actions) > 0) RETURN b.id AS id, b.name AS name, b.region AS region LIMIT 1000",
+        "cypher_visual_query": "MATCH (b:AWSS3Bucket) WHERE b.anonymous_access = true OR (b.anonymous_actions IS NOT NULL AND size(b.anonymous_actions) > 0) RETURN * LIMIT 1000",
+        "asset_label": "AWSS3Bucket",
+        "asset_id_field": "id",
+        "identity_fields": ["id"],
+        "display_field": "name"
+      }
+    ]
+  }
 }
 ```
 
-Errors returned as `MCPErrorResponse`:
-
-- `error="conflict"`: the id collides with a built-in rule or another custom rule. Pick a new id and retry.
-- `error="validation_error"`: Cypher rejected. Read `message`: it describes the issue (forbidden write op, missing `LIMIT` or `RETURN`, missing `AS` alias, live-graph syntax error). Fix and retry.
-
-### Step 6: Report back to the user
-
-Tell the user:
-
-- the new rule id,
-- that findings appear after the next scheduled findings build, not immediately,
-- after the next build, they can read the rule's findings with the Cypher in Verification below, or open the rule in the SubImage UI.
-
 ## Output
 
-A persisted custom rule registered with the tenant, produced by the single `subimageCreateCustomRule` call. The rule definition is stored immediately; findings against it are computed on the next scheduled findings build (see Workflow step 6 and Verification).
+A saved custom rule, or a draft waiting on the user's approval in chat, plus the hand-off from Step 6.
 
 ## Verification
 
-After the next scheduled findings build completes, count the Findings the rule produced:
+Verification happens before the save: the probes in Step 3, then a save that passes the tool's own run. Do not promise to check findings later.
+
+If, in a later turn, the user asks how an already-built rule is doing, call `subimageListRules` and read that rule's row. It carries `findings_count`, `accepted_count`, `exec_status`, and, when the last run failed, `error`, `error_code`, `error_hint`, and `last_ok_at`.
+
+Run Cypher only when they want the findings themselves:
 
 ```cypher
-MATCH (:Rule {id: '<new-id>'})-[:PRODUCED]->(f:Finding:Signal)
+MATCH (f:Finding:Signal {rule_id: '<RULE_ID>'})
 WHERE f.status = 'active'
-RETURN count(f) AS findings
+OPTIONAL MATCH (f)-[:AFFECTS {role: 'primary'}]->(a)
+RETURN f.display_name AS finding, labels(a) AS asset_labels, a.id AS asset_id,
+       f.fields_json AS fields_json
+LIMIT 100
 ```
 
-Expect a count consistent with what `subimageRunCypher` returned during Step 4. If the build has not run yet, the count is zero; this is not a failure.
+An active finding can lack its `AFFECTS` edge, so attach the asset with `OPTIONAL MATCH` and read the asset id from `fields_json` when it is missing.
 
 ## Anti-patterns
 
-- `RETURN *` or unaliased `RETURN` expressions in `cypher_query`. The server rejects the rule.
-- `cypher_visual_query` returning scalar properties instead of whole nodes. The UI graph view will be empty.
-- Using the reserved `custom` tag. Drop it silently if the user asks for it.
-- Trying to set rule maturity. It is fixed at `EXPERIMENTAL` server-side.
-- Drafting a `cypher_count_query` on a Fact. Not supported for custom rules.
-- Skipping Step 4 (live-graph validation) and submitting a rule that produces 0 findings.
-- Setting `allow_community_contribution: true` without an explicit opt-in from the user. Default to `false`.
-- Calling `subimageCreateCustomRule` more than once with the same id after a `validation_error`. Fix the payload first, then retry.
+- Choosing fields before naming the action. The anchor and the identity follow from it.
+- Putting a count, a timestamp, or a list of current causes in the identity. Findings churn and acceptance is lost.
+- Leaving `identity_fields` unset on a query whose columns may grow. Every new column replaces every finding.
+- A `LIMIT` near the real count, or a query whose count is at its `LIMIT`. Findings rotate.
+- An asset id that is not `<var>.id` off a node bound to `asset_label`, or one that can be null.
+- Loosening a correct query because it returns 0 rows today.
+- Renaming a fact id, or dropping optional fields, on an update.
+- Saying you will wait for the build or check the findings later. The turn ends first.
+- Retrying a refused body unchanged.
 
 ## References
 
+- Custom rules in SubImage: https://app.subimage.io/docs/custom_rules
 - SubImage MCP setup: https://app.subimage.io/docs/agents/connect_via_mcp
-- Sibling skill for Cypher discovery and authoring: [`build-cypher-query`](../build-cypher-query/SKILL.md)
+- Schema discovery and Cypher authoring: [`build-cypher-query`](../build-cypher-query/SKILL.md)

@@ -88,6 +88,8 @@ In-chat report (no file output). Tag resources with `[[entity:<Label>:<id>|<name
 <one or two lines: biggest exposure, most stale cluster, or worst CVE>
 ```
 
+When the biggest risk is a condition that can come back, such as a workload exposed to the internet, and no rule in `subimageListRules` covers it, end with a one-line offer to watch for it with a custom rule (skill: `subimage-mcp:create-custom-rule`). Say what one finding would be, for example "one finding per internet-exposed Kubernetes service". Build it only if the user accepts.
+
 ## Anti-patterns
 
 - Counting cluster nodes without `WHERE ec2.state = 'running'`. This is the documented cause of inflated counts; always filter.

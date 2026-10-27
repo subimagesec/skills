@@ -99,6 +99,8 @@ Produce an in-chat report (do not write to a file). Keep it scannable; tag every
 
 If a phase returns nothing, keep its heading and write "None found" rather than dropping it.
 
+When a risk you report can come back, such as a role trusting a foreign account, and no rule in `subimageListRules` covers it, end with a one-line offer to watch for it with a custom rule (skill: `subimage-mcp:create-custom-rule`). Say what one finding would be, for example "one finding per role that trusts a principal in a foreign account". Build it only if the user accepts.
+
 ## Anti-patterns
 
 - Trusting a template label/relationship without schema-validating it first. The graph drifts; an unvalidated `MATCH` silently returns zero rows and you under-report admins.
