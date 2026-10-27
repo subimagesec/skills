@@ -69,7 +69,7 @@ This is what a findings build does with each fact. Every field choice above land
    - a value does not fit its column.
    
    Rows that are identical in every column collapse into one finding.
-3. **Every column becomes text.** Each `RETURN` alias is a finding field. Booleans become `true`/`false`, times become ISO text, maps become JSON, numbers become text, and lists are joined with `", "` in the order the query returned them. Nulls and empty strings are dropped. A rule's columns are the union of all its facts' aliases, so a column one fact lacks is blank on that fact's findings.
+3. **Columns become text.** Each `RETURN` alias is a finding field, stored as text the first time it is saved. Booleans become `true`/`false`, times become ISO text, maps become JSON, numbers become text, and lists are joined with `", "` in the order the query returned them. Nulls and empty strings are dropped. A column an older rule saved as a number or boolean keeps that type and must keep receiving it. A rule's columns are the union of all its facts' aliases, so a column one fact lacks is blank on that fact's findings.
 4. **Identity is a hash.** A finding's id hashes the rule id, the fact id, and the identity column values. Changing any of them makes a different finding: a new rule or fact id, a different set of identity columns, or a changed value in one of them. With `identity_fields` omitted, the identity is every returned column, so adding or removing a column replaces every finding.
 5. **Each build is matched against the last.** A new id opens a finding. A missing id closes it into history. A matching id keeps its first-seen date and its acceptance, and records an update when a non-identity column or the affected asset changed.
 6. **The affected asset** is `asset_label` plus `asset_id_field`: a label the query binds and a column returned as exactly `<var>.id` off that variable. `u.id AS id` works; `u.arn AS id` does not. Leave it out of the identity to let a finding survive its resource being rebuilt.
@@ -82,7 +82,7 @@ This is what a findings build does with each fact. Every field choice above land
 - Filter out null ids when the asset comes from an `OPTIONAL MATCH`: `WHERE x.id IS NOT NULL`.
 - Use `DISTINCT`, or aggregate with `collect()`, when several graph paths reach the same answer.
 - Filter early on labels and properties, and bound variable-length paths. Otherwise the rule fails on time or memory.
-- Prefer ontology labels (`Device`, `UserAccount`, `ComputeInstance`, `Container`) for cross-provider questions, with `module: "Cross-Cloud"`. Use provider labels when the question is about one provider.
+- Prefer ontology labels (`User` for a person across providers, `UserAccount` for each provider account, `Device`, `ComputeInstance`, `Container`) for cross-provider questions, with `module: "Cross-Cloud"`. Use provider labels when the question is about one provider.
 - `module` labels the fact and does not gate it: the rule runs whether or not that module is synced. It must be one of `AIBOM`, `Airbyte`, `Anthropic`, `AWS`, `Azure`, `BigFix`, `Cloudflare`, `CrowdStrike`, `Databricks`, `DigitalOcean`, `Duo`, `microsoft`, `GCP`, `GitHub`, `GitLab`, `googleworkspace`, `Jamf`, `JumpCloud`, `Kandji`, `Keycloak`, `Kubernetes`, `LastPass`, `OCI`, `Okta`, `OpenAI`, `PagerDuty`, `Railway`, `Scaleway`, `Supabase`, `Semgrep`, `SentinelOne`, `snipeit`, `SpaceLift`, `TailScale`, `Trivy`, `SubImage`, `Zoom`, `Cross-Cloud`. The casing is exact.
 - `source` and `extra` are reserved and cannot be aliases.
 
@@ -165,9 +165,10 @@ Codes inside `custom_rule_test_failed`:
 | `duplicate_signal_id` | Two rows share an identity but differ elsewhere. Add the differing column to `identity_fields`, or collapse the rows with `DISTINCT` or `collect()`. Decide by the grain from Step 1. |
 | `invalid_rule_output` | A column first saved as a number or boolean received another type. Return that type, or return the value under a new alias, which is stored as text. |
 | `memory_limit_exceeded` | Filter before aggregating and bound variable-length paths. |
-| `query_timeout` | Only the interactive time limit was hit. It does not block the save, since the build has no limit, but narrow the query if you can. |
 
 Any other code is on SubImage's side. Tell the user to contact support.
+
+A query slower than the interactive time limit is not refused. The findings build runs it without that limit, so the save goes through and reports nothing. If a probe in Step 3 is slow, narrow the query before saving.
 
 ## Example
 
@@ -211,11 +212,15 @@ Verification happens before the save: the probes in Step 3, then a save that pas
 If, in a later turn, the user asks how an already-built rule is doing:
 
 ```cypher
-MATCH (:Rule {id: '<RULE_ID>'})-[:PRODUCED]->(f:Finding:Signal)-[:AFFECTS {role: 'primary'}]->(a)
+MATCH (:Rule {id: '<RULE_ID>'})-[:PRODUCED]->(f:Finding:Signal)
 WHERE f.status = 'active'
-RETURN f.display_name AS finding, labels(a) AS asset_labels, a.id AS asset_id
+OPTIONAL MATCH (f)-[:AFFECTS {role: 'primary'}]->(a)
+RETURN f.display_name AS finding, labels(a) AS asset_labels, a.id AS asset_id,
+       f.fields_json AS fields_json
 LIMIT 100
 ```
+
+An active finding can lack its `AFFECTS` edge, for example after its asset was deleted and re-created under the same id, so attach the asset with `OPTIONAL MATCH`. `fields_json` still holds the asset id.
 
 ## Anti-patterns
 
