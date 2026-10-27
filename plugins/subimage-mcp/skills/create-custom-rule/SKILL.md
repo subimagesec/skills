@@ -11,7 +11,7 @@ Turn what the user wants to act on into a rule whose findings land where that ac
 
 A custom rule is a detection the tenant writes in Cypher. After every findings build, each row its queries return becomes a finding on the Rules page. Findings then go through the same acceptance, history, notifications, and issue triage as a built-in rule's.
 
-A rule is not a form to fill in. Every field is a lever on how rows turn into findings, and the right setting follows from what someone will do with a finding once it exists. Read **Design the rule** and **How rows become findings** before drafting. Most bad rules come from skipping them.
+A rule is not a form to fill in. Every field is a lever on how rows turn into findings, and the right setting follows from what someone will do with a finding once it exists. Read **Design the rule** and **How fields shape findings** before drafting. Most bad rules come from skipping them.
 
 Uses `subimageListRules`, `subimageRunCypher`, `subimageCreateCustomRule`, `subimageUpdateCustomRule`, and the sibling skill [`build-cypher-query`](../build-cypher-query/SKILL.md) for schema discovery.
 
@@ -58,22 +58,19 @@ When a node's `id` is in the identity, its other properties add nothing: the id 
 
 A rule has one or more facts, each with its own query. Write several only when one question needs different queries to cover differently shaped graphs, such as one per provider. A different question is a different rule.
 
-## How rows become findings
+## How fields shape findings
 
-This is what a findings build does with each fact. Every field choice above lands somewhere in it.
+Each row a fact returns is one finding. The fields decide which rows count as the same finding, what it is attached to, and when the whole rule fails.
 
-1. **The query is wrapped.** It runs as the body of `CALL { ... }`, so a trailing `;` is dropped and `LIMIT` applies inside, before anything else. The build then looks up the node with label `asset_label` whose `id` equals the `asset_id_field` column.
-2. **One bad row fails the whole rule.** The build stops rather than skipping the row, because a skipped row would read as a fixed finding. The rule goes to `ERROR` and keeps its existing findings. A row fails when:
-   - no `asset_label` node has that id, including a null id from an `OPTIONAL MATCH`;
-   - two rows share the identity but differ in another column;
-   - a value does not fit its column.
+1. **One bad row fails the whole rule.** The rule goes to `ERROR` and keeps its existing findings until it runs clean. A row is bad when:
+   - no `asset_label` node has its asset id, including a null id from an `OPTIONAL MATCH`;
+   - it shares its identity with another row but differs in another column.
    
    Rows that are identical in every column collapse into one finding.
-3. **Columns become text.** Each `RETURN` alias is a finding field, stored as text the first time it is saved. Booleans become `true`/`false`, times become ISO text, maps become JSON, numbers become text, and lists are joined with `", "` in the order the query returned them. Nulls and empty strings are dropped. A column an older rule saved as a number or boolean keeps that type and must keep receiving it. A rule's columns are the union of all its facts' aliases, so a column one fact lacks is blank on that fact's findings.
-4. **Identity is a hash.** A finding's id hashes the rule id, the fact id, and the identity column values. Changing any of them makes a different finding: a new rule or fact id, a different set of identity columns, or a changed value in one of them. With `identity_fields` omitted, the identity is every returned column, so adding or removing a column replaces every finding.
-5. **Each build is matched against the last.** A new id opens a finding. A missing id closes it into history. A matching id keeps its first-seen date and its acceptance, and records an update when a non-identity column or the affected asset changed.
-6. **The affected asset** is `asset_label` plus `asset_id_field`: a label the query binds and a column returned as exactly `<var>.id` off that variable. `u.id AS id` works; `u.arn AS id` does not. Leave it out of the identity to let a finding survive its resource being rebuilt.
-7. **The display field** is the column a finding is shown as. Omitted or empty, it is the asset id.
+2. **Each alias is a finding field.** A rule's columns are the union of its facts' aliases, so give the facts of one rule the same aliases for the same things.
+3. **Identity decides what is the same finding.** A finding carries over from one build to the next only while its rule id, fact id, identity columns, and their values all stay the same. A carried-over finding keeps its first-seen date and its acceptance, and records an update when a non-identity column or the affected asset changed. Anything else opens a new finding, and a finding that no longer appears closes into history. With `identity_fields` omitted, the identity is every returned column, so adding or removing a column replaces every finding.
+4. **The affected asset** is the node with label `asset_label` whose `id` is the `asset_id_field` column. The query must bind that label and return exactly `<var>.id` off it: `u.id AS id` works; `u.arn AS id` does not. Leave it out of the identity to let a finding survive its resource being rebuilt.
+5. **The display field** is the column a finding is shown as. Omitted or empty, it is the asset id.
 
 ## Query craft
 
@@ -163,12 +160,11 @@ Codes inside `custom_rule_test_failed`:
 | `cypher_error` | Neo4j rejected the query. Run it with `subimageRunCypher` to see the full error. |
 | `affected_asset_not_found` | A row's asset id matches no `asset_label` node. Return `<var>.id` off the labeled variable and filter out nulls. |
 | `duplicate_signal_id` | Two rows share an identity but differ elsewhere. Add the differing column to `identity_fields`, or collapse the rows with `DISTINCT` or `collect()`. Decide by the grain from Step 1. |
-| `invalid_rule_output` | A column first saved as a number or boolean received another type. Return that type, or return the value under a new alias, which is stored as text. |
 | `memory_limit_exceeded` | Filter before aggregating and bound variable-length paths. |
 
 Any other code is on SubImage's side. Tell the user to contact support.
 
-A query slower than the interactive time limit is not refused. The findings build runs it without that limit, so the save goes through and reports nothing. If a probe in Step 3 is slow, narrow the query before saving.
+A query that times out in `subimageRunCypher` can still be saved, since the findings build has no time limit. Narrow it if you can.
 
 ## Example
 
@@ -220,7 +216,7 @@ RETURN f.display_name AS finding, labels(a) AS asset_labels, a.id AS asset_id,
 LIMIT 100
 ```
 
-An active finding can lack its `AFFECTS` edge, for example after its asset was deleted and re-created under the same id, so attach the asset with `OPTIONAL MATCH`. `fields_json` still holds the asset id.
+An active finding can lack its `AFFECTS` edge, so attach the asset with `OPTIONAL MATCH` and read the asset id from `fields_json` when it is missing.
 
 ## Anti-patterns
 
