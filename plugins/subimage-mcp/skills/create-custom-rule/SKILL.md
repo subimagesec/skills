@@ -60,13 +60,14 @@ A rule has one or more facts, each with its own query. Write several only when o
 
 ## How fields shape findings
 
-Each row a fact returns is one finding. The fields decide which rows count as the same finding, what it is attached to, and when the whole rule fails.
+Each distinct row a fact returns is one finding. The fields decide which rows count as the same finding, what it is attached to, and when the whole rule fails.
 
 1. **One bad row fails the whole rule.** The rule goes to `ERROR` and keeps its existing findings until it runs clean. A row is bad when:
    - no `asset_label` node has its asset id, including a null id from an `OPTIONAL MATCH`;
    - it shares its identity with another row but differs in another column.
-   
+
    Rows that are identical in every column collapse into one finding.
+
 2. **Each alias is a finding field.** A rule's columns are the union of its facts' aliases, so give the facts of one rule the same aliases for the same things.
 3. **Identity decides what is the same finding.** A finding carries over from one build to the next only while its rule id, fact id, identity columns, and their values all stay the same. A carried-over finding keeps its first-seen date and its acceptance, and records an update when a non-identity column or the affected asset changed. Anything else opens a new finding, and a finding that no longer appears closes into history. With `identity_fields` omitted, the identity is every returned column, so adding or removing a column replaces every finding.
 4. **The affected asset** is the node with label `asset_label` whose `id` is the `asset_id_field` column. The query must bind that label and return exactly `<var>.id` off it: `u.id AS id` works; `u.arn AS id` does not. Leave it out of the identity to let a finding survive its resource being rebuilt.
@@ -119,12 +120,11 @@ Use [`build-cypher-query`](../build-cypher-query/SKILL.md) to discover labels an
 
 Rule: `id`, `name`, `description`, `tags`, `references` (each `{title, url}`), `allow_community_contribution` (default `false`; set `true` only on an explicit opt-in), `facts`.
 
-Fact: `id`, `name`, `description`, `module`, `cypher_query`, `cypher_visual_query`, `asset_label`, `asset_id_field`, optional `identity_fields`, optional `display_field`.
+Fact: `id`, `name`, `description`, `cypher_query`, `cypher_visual_query`, `asset_label`, `asset_id_field`, optional `identity_fields`, optional `display_field`.
 
 - `cypher_query` aliases every returned column with `AS`, has a `LIMIT`, and is read-only. `CREATE`, `MERGE`, `DELETE`, `SET`, `REMOVE`, and `LOAD CSV` are rejected.
 - `cypher_visual_query` is the same query with its last `RETURN` replaced by `RETURN *`, keeping the `LIMIT`. It draws the graph view and does not decide which rows become findings.
 - `identity_fields` and `display_field` name returned columns.
-- `module` is always `"Cross-Cloud"`, whatever the query reads.
 - Do not send `output_fields`, `maturity`, or `cypher_count_query`.
 
 **Update:** send the whole rule back. `id` cannot change. Keep every fact `id` as it is, because a new fact id replaces that fact's findings. An omitted optional field resets to its default: `tags`, `references`, `identity_fields`, and `display_field` included.
@@ -154,13 +154,13 @@ A refused save returns `MCPErrorResponse`:
 
 Codes inside `custom_rule_test_failed`:
 
-| Code | Fix |
-|---|---|
-| `invalid_fact` | A save-time check failed: a missing `AS` alias or `LIMIT`, a write clause, an anchor that is not `<var>.id` off a node bound to `asset_label`, or identity or display fields that are not returned columns. The error names which. |
-| `cypher_error` | Neo4j rejected the query. Run it with `subimageRunCypher` to see the full error. |
-| `affected_asset_not_found` | A row's asset id matches no `asset_label` node. Return `<var>.id` off the labeled variable and filter out nulls. |
-| `duplicate_signal_id` | Two rows share an identity but differ elsewhere. Add the differing column to `identity_fields`, or collapse the rows with `DISTINCT` or `collect()`. Decide by the grain from Step 1. |
-| `memory_limit_exceeded` | Filter before aggregating and bound variable-length paths. |
+| Code                       | Fix                                                                                                                                                                                                                                |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `invalid_fact`             | A save-time check failed: a missing `AS` alias or `LIMIT`, a write clause, an anchor that is not `<var>.id` off a node bound to `asset_label`, or identity or display fields that are not returned columns. The error names which. |
+| `cypher_error`             | Neo4j rejected the query. Run it with `subimageRunCypher` to see the full error.                                                                                                                                                   |
+| `affected_asset_not_found` | A row's asset id matches no `asset_label` node. Return `<var>.id` off the labeled variable and filter out nulls.                                                                                                                   |
+| `duplicate_signal_id`      | Two rows share an identity but differ elsewhere. Add the differing column to `identity_fields`, or collapse the rows with `DISTINCT` or `collect()`. Decide by the grain from Step 1.                                              |
+| `memory_limit_exceeded`    | Filter before aggregating and bound variable-length paths.                                                                                                                                                                         |
 
 Any other code is on SubImage's side. Tell the user to contact support.
 
@@ -184,7 +184,6 @@ A query that times out in `subimageRunCypher` can still be saved, since the find
         "id": "s3-bucket-anonymous-access-0",
         "name": "S3 buckets with anonymous access",
         "description": "Buckets flagged as anonymously accessible or with anonymous actions allowed.",
-        "module": "Cross-Cloud",
         "cypher_query": "MATCH (b:AWSS3Bucket) WHERE b.anonymous_access = true OR (b.anonymous_actions IS NOT NULL AND size(b.anonymous_actions) > 0) RETURN b.id AS id, b.name AS name, b.region AS region LIMIT 1000",
         "cypher_visual_query": "MATCH (b:AWSS3Bucket) WHERE b.anonymous_access = true OR (b.anonymous_actions IS NOT NULL AND size(b.anonymous_actions) > 0) RETURN * LIMIT 1000",
         "asset_label": "AWSS3Bucket",
@@ -205,10 +204,12 @@ A saved custom rule, or a draft waiting on the user's approval in chat, plus the
 
 Verification happens before the save: the probes in Step 3, then a save that passes the tool's own run. Do not promise to check findings later.
 
-If, in a later turn, the user asks how an already-built rule is doing:
+If, in a later turn, the user asks how an already-built rule is doing, call `subimageListRules` and read that rule's row. It carries `findings_count`, `accepted_count`, `exec_status`, and, when the last run failed, `error`, `error_code`, `error_hint`, and `last_ok_at`.
+
+Run Cypher only when they want the findings themselves:
 
 ```cypher
-MATCH (:Rule {id: '<RULE_ID>'})-[:PRODUCED]->(f:Finding:Signal)
+MATCH (f:Finding:Signal {rule_id: '<RULE_ID>'})
 WHERE f.status = 'active'
 OPTIONAL MATCH (f)-[:AFFECTS {role: 'primary'}]->(a)
 RETURN f.display_name AS finding, labels(a) AS asset_labels, a.id AS asset_id,
