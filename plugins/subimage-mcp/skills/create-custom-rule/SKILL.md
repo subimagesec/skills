@@ -28,7 +28,7 @@ Uses `subimageListRules`, `subimageRunCypher`, `subimageCreateCustomRule`, `subi
 
 ## Required inputs
 
-Only the intent: what the user will do with a finding. Ask about it only when the request could serve more than one action (see **Start from the action**). Derive the id, name, description, tags, and module yourself and propose them. In chat, the approval card shows them before anything is written.
+Only the intent: what the user will do with a finding. Ask about it only when the request could serve more than one action (see **Start from the action**). Derive the id, name, description, and tags yourself and propose them. In chat, the approval card shows them before anything is written.
 
 ## Design the rule
 
@@ -79,8 +79,7 @@ Each row a fact returns is one finding. The fields decide which rows count as th
 - Filter out null ids when the asset comes from an `OPTIONAL MATCH`: `WHERE x.id IS NOT NULL`.
 - Use `DISTINCT`, or aggregate with `collect()`, when several graph paths reach the same answer.
 - Filter early on labels and properties, and bound variable-length paths. Otherwise the rule fails on time or memory.
-- Prefer ontology labels (`User` for a person across providers, `UserAccount` for each provider account, `Device`, `ComputeInstance`, `Container`) for cross-provider questions, with `module: "Cross-Cloud"`. Use provider labels when the question is about one provider.
-- `module` labels the fact and does not gate it: the rule runs whether or not that module is synced. It must be one of `AIBOM`, `Airbyte`, `Anthropic`, `AWS`, `Azure`, `BigFix`, `Cloudflare`, `CrowdStrike`, `Databricks`, `DigitalOcean`, `Duo`, `microsoft`, `GCP`, `GitHub`, `GitLab`, `googleworkspace`, `Jamf`, `JumpCloud`, `Kandji`, `Keycloak`, `Kubernetes`, `LastPass`, `OCI`, `Okta`, `OpenAI`, `PagerDuty`, `Railway`, `Scaleway`, `Supabase`, `Semgrep`, `SentinelOne`, `snipeit`, `SpaceLift`, `TailScale`, `Trivy`, `SubImage`, `Zoom`, `Cross-Cloud`. The casing is exact.
+- Prefer ontology labels (`User` for a person across providers, `UserAccount` for each provider account, `Device`, `ComputeInstance`, `Container`) for cross-provider questions. Use provider labels when the question is about one provider.
 - `source` and `extra` are reserved and cannot be aliases.
 
 ## What findings feed
@@ -125,6 +124,7 @@ Fact: `id`, `name`, `description`, `module`, `cypher_query`, `cypher_visual_quer
 - `cypher_query` aliases every returned column with `AS`, has a `LIMIT`, and is read-only. `CREATE`, `MERGE`, `DELETE`, `SET`, `REMOVE`, and `LOAD CSV` are rejected.
 - `cypher_visual_query` is the same query with its last `RETURN` replaced by `RETURN *`, keeping the `LIMIT`. It draws the graph view and does not decide which rows become findings.
 - `identity_fields` and `display_field` name returned columns.
+- `module` is always `"Cross-Cloud"`, whatever the query reads.
 - Do not send `output_fields`, `maturity`, or `cypher_count_query`.
 
 **Update:** send the whole rule back. `id` cannot change. Keep every fact `id` as it is, because a new fact id replaces that fact's findings. An omitted optional field resets to its default: `tags`, `references`, `identity_fields`, and `display_field` included.
@@ -184,7 +184,7 @@ A query that times out in `subimageRunCypher` can still be saved, since the find
         "id": "s3-bucket-anonymous-access-0",
         "name": "S3 buckets with anonymous access",
         "description": "Buckets flagged as anonymously accessible or with anonymous actions allowed.",
-        "module": "AWS",
+        "module": "Cross-Cloud",
         "cypher_query": "MATCH (b:AWSS3Bucket) WHERE b.anonymous_access = true OR (b.anonymous_actions IS NOT NULL AND size(b.anonymous_actions) > 0) RETURN b.id AS id, b.name AS name, b.region AS region LIMIT 1000",
         "cypher_visual_query": "MATCH (b:AWSS3Bucket) WHERE b.anonymous_access = true OR (b.anonymous_actions IS NOT NULL AND size(b.anonymous_actions) > 0) RETURN * LIMIT 1000",
         "asset_label": "AWSS3Bucket",
