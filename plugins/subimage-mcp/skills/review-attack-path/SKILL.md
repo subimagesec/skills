@@ -217,6 +217,8 @@ N. The chain ends at [[entity:<Label>:<id>|<short>]] which gives them <impact>.
 - Re-run after the change: SubImage refreshes paths on the next sync.
 ```
 
+When a key pivot rests on a condition that can appear elsewhere, such as a role that trusts a public principal, and no rule in `subimageListRules` covers it, end with a one-line offer to watch for it with a custom rule (skill: `subimage-mcp:create-custom-rule`). The rule flags the condition wherever it appears, whether or not it completes a path. Say what one finding would be, and build it only if the user accepts.
+
 After Mode C, append:
 
 ```

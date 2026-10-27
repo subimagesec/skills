@@ -193,6 +193,8 @@ Use an in-chat provenance report. Tag resources with `[[entity:<Label>:<id>|<nam
 - <attack path, owner remediation, rule tuning, live validation, or "none">
 ```
 
+When the cause is a misconfiguration that can come back, and no rule in `subimageListRules` covers it, end with a one-line offer to watch for it with a custom rule (skill: `subimage-mcp:create-custom-rule`). Say what one finding would be, for example "one finding per bucket readable through its CloudFront distribution". Build it only if the user accepts.
+
 ## Verification
 
 - Confirm each label/property/relationship appears in schema output or a saved model query before using it in the final query.
