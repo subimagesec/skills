@@ -35,7 +35,9 @@ depends on a single question: did the user name a category or a product?
 - **A product, named explicitly**, takes that product's native label from the
   named-products table. "Our RDS instances", "our EKS clusters", "our GitHub
   repositories" each name one product, and its native label is the only label
-  that means exactly that product. Take one native label, never a union.
+  that means exactly that product. Take one native label, never a union. The
+  only exception is a product whose table row lists several native labels,
+  such as Semgrep: use exactly those labels, in one label expression.
 
 A provider word is not a product name. "Our AWS databases" is a category scoped
 to a provider, so it stays on the ontology label with an `_ont_source` filter,
@@ -120,7 +122,8 @@ Traps worth naming:
   `MATCH (n:Tenant) WHERE n:AWSAccount OR n:AzureSubscription` silently drops
   every provider you did not list, and SaaS tenants (Okta, GitHub, OpenAI, ...)
   are `:Tenant` too. Filter on `_ont_source` when the user asks for one provider.
-  A native label answers a product the user named, one label, never a union.
+  A native label answers a product the user named, one label, never a union,
+  unless that product's table row lists several labels.
 - `:ComputeCluster` double-counts EKS unless you exclude the Kubernetes twin:
   `WHERE NOT (n:KubernetesCluster AND EXISTS { (:AWSEKSCluster)-[:MAPS_TO]->(n) })`.
   `:AWSEKSCluster` is the current primary label; the unprefixed `:EKSCluster`
@@ -374,6 +377,8 @@ rather than implying the page is the whole set.
 - The query names exactly one label: the ontology label when the user named a
   category, that product's native label only when the user named the product.
   Never a union of labels, and never a native label for a generic request.
+  The one exception is a named product whose table row lists several native
+  labels: the query names exactly those, in one label expression.
 - Any AWS native label in the query is `AWS`-prefixed.
 - One `subimageRunCypher` call answered it, plus at most one schema call when the
   named product had no row. More than two means the entry gate was wrong and this
