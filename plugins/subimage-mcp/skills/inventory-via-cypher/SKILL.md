@@ -50,8 +50,9 @@ Do NOT load it for:
   exception is a named security tool's own findings ("SentinelOne findings",
   "GuardDuty alerts"): those are the tool's native nodes, so they stay here as a
   named product. A security tool is a scanner, EDR or detection service that
-  reports findings itself. An identity provider, cloud provider or SaaS app is
-  not one: "Okta findings" or "AWS findings" mean SubImage findings about those
+  reports findings itself, even when it is delivered as SaaS. Naming an
+  identity provider, cloud provider or ordinary SaaS app alone is not enough:
+  "Okta findings" or "AWS findings" mean SubImage findings about those
   resources, so they go to `signals-via-cypher`;
 - issues and action items (`subimageListIssues`);
 - which compliance rules and frameworks exist or are enabled
@@ -186,11 +187,13 @@ every provider:
 - `:AWSInspectorFinding`: `name`, `type`, `severity`, `status`, `cve_id`,
   `fixavailable`, `exploitavailable`.
 - `:GitHubDependabotAlert`: `state`, `severity`.
-- Semgrep findings: `severity`, `triage_status` and `fix_status` on every kind;
-  `cve_id`, `dependency` and `reachability` on `:SemgrepSCAFinding`; `title`,
-  `rule_id` and `file_path` on `:SemgrepSASTFinding` and `:SemgrepAISASTFinding`;
-  `type` and `validation_state` on `:SemgrepSecretsFinding`. Each links to its
-  repository through `FOUND_IN`, to `:GitHubRepository` or `:GitLabProject`.
+- Semgrep findings: `severity` on every kind. SCA, SAST and AI SAST findings
+  also have `triage_status` and `fix_status`; `:SemgrepSecretsFinding` has
+  `status` instead. `cve_id`, `dependency` and `reachability` on
+  `:SemgrepSCAFinding`; `title`, `rule_id` and `file_path` on
+  `:SemgrepSASTFinding` and `:SemgrepAISASTFinding`; `type` and
+  `validation_state` on `:SemgrepSecretsFinding`. Each links to its repository
+  through `FOUND_IN`, to `:GitHubRepository` or `:GitLabProject`.
 
 Native-label traps:
 
@@ -205,8 +208,8 @@ Native-label traps:
 - A product name is never a label substring. Labels use the provider's own
   prefix, so `sentinelone` matches nothing: SentinelOne is `:S1AppFinding`.
 - There is no `:SemgrepFinding` label. "Semgrep findings" with no kind named
-  means all four labels: `MATCH (n) WHERE n:SemgrepSCAFinding OR
-  n:SemgrepSASTFinding OR n:SemgrepAISASTFinding OR n:SemgrepSecretsFinding`.
+  means all four labels:
+  `MATCH (n:SemgrepSCAFinding|SemgrepSASTFinding|SemgrepAISASTFinding|SemgrepSecretsFinding)`.
 - GuardDuty and Inspector findings belong to the account they are in through
   `MEMBER`: `(:AWSAccount)-[:MEMBER]->(n:AWSGuardDutyFinding)`. Their `RESOURCE`
   edge points at the account that collected them, which for a delegated
