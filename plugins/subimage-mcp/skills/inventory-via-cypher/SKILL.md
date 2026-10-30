@@ -1,6 +1,6 @@
 ---
 name: inventory-via-cypher
-description: Answer flat resource-inventory questions - list, count, filter, sort, or paginate ONE resource type - by mapping the requested type to its Neo4j ontology label, or to the provider-native label when the user names a specific product, then running a single Cypher query. Use when the user asks "list", "how many", "show me all", "which of our <resource type>", or names a product such as "our RDS instances", "our EKS clusters", or "our GitHub repositories", across any cloud, SaaS, or VCS provider. Also use when the user asks for the findings or alerts a named security tool reported, such as "our SentinelOne findings" or "GuardDuty alerts".
+description: Answer flat resource-inventory questions - list, count, filter, sort, or paginate ONE resource type - by mapping the requested type to its Neo4j ontology label, or to the provider-native label when the user names a specific product, then running a single Cypher query. Use when the user asks "list", "how many", "show me all", "which of our <resource type>", or names a product such as "our RDS instances", "our EKS clusters", or "our GitHub repositories", across any cloud, SaaS, or VCS provider. Also use when the user asks for the findings or alerts a named security tool reported, such as "our SentinelOne findings", "GuardDuty alerts" or "Semgrep findings". An identity provider, cloud provider or SaaS app is not a security tool, so "Okta findings" means SubImage findings about Okta resources and belongs to signals-via-cypher.
 ---
 
 # Inventory via Cypher
@@ -49,7 +49,10 @@ Do NOT load it for:
   `:Signal` nodes with their own shapes (use `signals-via-cypher`). The
   exception is a named security tool's own findings ("SentinelOne findings",
   "GuardDuty alerts"): those are the tool's native nodes, so they stay here as a
-  named product;
+  named product. A security tool is a scanner, EDR or detection service that
+  reports findings itself. An identity provider, cloud provider or SaaS app is
+  not one: "Okta findings" or "AWS findings" mean SubImage findings about those
+  resources, so they go to `signals-via-cypher`;
 - issues and action items (`subimageListIssues`);
 - which compliance rules and frameworks exist or are enabled
   (`subimageListRules`, `subimageListFrameworks`).
@@ -162,6 +165,7 @@ provider was renamed, which is why `:GKECluster` carries no `GCP` prefix.
 | GuardDuty findings | `:AWSGuardDutyFinding` | `:SecurityIssue` |
 | Inspector findings | `:AWSInspectorFinding` | `:CVE` when `type` is `PACKAGE_VULNERABILITY`, `:SecurityIssue` when `NETWORK_REACHABILITY` |
 | Dependabot alerts | `:GitHubDependabotAlert` | `:SecurityIssue`, plus `:CVE` when it has one |
+| Semgrep findings | `:SemgrepSCAFinding` (dependencies), `:SemgrepSASTFinding` (code), `:SemgrepAISASTFinding` (AI code review), `:SemgrepSecretsFinding` (secrets) | `:CVE` on SCA findings with `has_cve = 'true'`, `:SecurityIssue` on the rest |
 
 Native properties worth filtering on, none of which the ontology projects for
 every provider:
@@ -182,6 +186,11 @@ every provider:
 - `:AWSInspectorFinding`: `name`, `type`, `severity`, `status`, `cve_id`,
   `fixavailable`, `exploitavailable`.
 - `:GitHubDependabotAlert`: `state`, `severity`.
+- Semgrep findings: `severity`, `triage_status` and `fix_status` on every kind;
+  `cve_id`, `dependency` and `reachability` on `:SemgrepSCAFinding`; `title`,
+  `rule_id` and `file_path` on `:SemgrepSASTFinding` and `:SemgrepAISASTFinding`;
+  `type` and `validation_state` on `:SemgrepSecretsFinding`. Each links to its
+  repository through `FOUND_IN`, to `:GitHubRepository` or `:GitLabProject`.
 
 Native-label traps:
 
@@ -195,6 +204,9 @@ Native-label traps:
   the parent account and carries no ontology label.
 - A product name is never a label substring. Labels use the provider's own
   prefix, so `sentinelone` matches nothing: SentinelOne is `:S1AppFinding`.
+- There is no `:SemgrepFinding` label. "Semgrep findings" with no kind named
+  means all four labels: `MATCH (n) WHERE n:SemgrepSCAFinding OR
+  n:SemgrepSASTFinding OR n:SemgrepAISASTFinding OR n:SemgrepSecretsFinding`.
 - GuardDuty and Inspector findings belong to the account they are in through
   `MEMBER`: `(:AWSAccount)-[:MEMBER]->(n:AWSGuardDutyFinding)`. Their `RESOURCE`
   edge points at the account that collected them, which for a delegated

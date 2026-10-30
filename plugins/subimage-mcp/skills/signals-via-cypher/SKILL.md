@@ -32,7 +32,10 @@ Do NOT load it for:
 - **flat resource inventory** of one resource type: use `inventory-via-cypher`.
 - **a named security tool's own findings** ("SentinelOne findings", "GuardDuty
   alerts"): those are the tool's native nodes, not Signals. Use
-  `inventory-via-cypher`, which maps the product to its native label.
+  `inventory-via-cypher`, which maps the product to its native label. Naming an
+  identity provider, cloud provider or SaaS app ("Okta findings", "findings on
+  our GitHub repos") does not make it a security tool: those are SubImage
+  findings about its resources, and stay here.
 - **what-if scenario modeling**: `subimageGetScenarioCapabilities`, then
   `subimageCreateAttackPathScenario`.
 
