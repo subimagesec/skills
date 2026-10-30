@@ -1,6 +1,6 @@
 ---
 name: inventory-via-cypher
-description: Answer flat resource-inventory questions - list, count, filter, sort, or paginate ONE resource type - by mapping the requested type to its Neo4j ontology label, or to the provider-native label when the user names a specific product, then running a single Cypher query. Use when the user asks "list", "how many", "show me all", "which of our <resource type>", or names a product such as "our RDS instances", "our EKS clusters", or "our GitHub repositories", across any cloud, SaaS, or VCS provider. Also use when the user asks for the findings or alerts a named security tool reported, such as "our SentinelOne findings" or "GuardDuty alerts".
+description: Answer flat resource-inventory questions - list, count, filter, sort, or paginate ONE resource type - by mapping the requested type to its Neo4j ontology label, or to the provider-native label when the user names a specific product, then running a single Cypher query. Use when the user asks "list", "how many", "show me all", "which of our <resource type>", or names a product such as "our RDS instances", "our EKS clusters", or "our GitHub repositories", across any cloud, SaaS, or VCS provider. Also use when the user asks for the findings or alerts a named security tool reported, such as "our SentinelOne findings", "GuardDuty alerts" or "Semgrep findings". An identity provider, cloud provider or SaaS app is not a security tool, so "Okta findings" means SubImage findings about Okta resources and belongs to signals-via-cypher.
 ---
 
 # Inventory via Cypher
@@ -35,7 +35,9 @@ depends on a single question: did the user name a category or a product?
 - **A product, named explicitly**, takes that product's native label from the
   named-products table. "Our RDS instances", "our EKS clusters", "our GitHub
   repositories" each name one product, and its native label is the only label
-  that means exactly that product. Take one native label, never a union.
+  that means exactly that product. Take one native label, never a union. The
+  only exception is a product whose table row lists several native labels,
+  such as Semgrep: use exactly those labels, in one label expression.
 
 A provider word is not a product name. "Our AWS databases" is a category scoped
 to a provider, so it stays on the ontology label with an `_ont_source` filter,
@@ -49,7 +51,11 @@ Do NOT load it for:
   `:Signal` nodes with their own shapes (use `signals-via-cypher`). The
   exception is a named security tool's own findings ("SentinelOne findings",
   "GuardDuty alerts"): those are the tool's native nodes, so they stay here as a
-  named product;
+  named product. A security tool is a scanner, EDR or detection service that
+  reports findings itself, even when it is delivered as SaaS. Naming an
+  identity provider, cloud provider or ordinary SaaS app alone is not enough:
+  "Okta findings" or "AWS findings" mean SubImage findings about those
+  resources, so they go to `signals-via-cypher`;
 - issues and action items (`subimageListIssues`);
 - which compliance rules and frameworks exist or are enabled
   (`subimageListRules`, `subimageListFrameworks`).
@@ -116,7 +122,8 @@ Traps worth naming:
   `MATCH (n:Tenant) WHERE n:AWSAccount OR n:AzureSubscription` silently drops
   every provider you did not list, and SaaS tenants (Okta, GitHub, OpenAI, ...)
   are `:Tenant` too. Filter on `_ont_source` when the user asks for one provider.
-  A native label answers a product the user named, one label, never a union.
+  A native label answers a product the user named, one label, never a union,
+  unless that product's table row lists several labels.
 - `:ComputeCluster` double-counts EKS unless you exclude the Kubernetes twin:
   `WHERE NOT (n:KubernetesCluster AND EXISTS { (:AWSEKSCluster)-[:MAPS_TO]->(n) })`.
   `:AWSEKSCluster` is the current primary label; the unprefixed `:EKSCluster`
@@ -162,6 +169,7 @@ provider was renamed, which is why `:GKECluster` carries no `GCP` prefix.
 | GuardDuty findings | `:AWSGuardDutyFinding` | `:SecurityIssue` |
 | Inspector findings | `:AWSInspectorFinding` | `:CVE` when `type` is `PACKAGE_VULNERABILITY`, `:SecurityIssue` when `NETWORK_REACHABILITY` |
 | Dependabot alerts | `:GitHubDependabotAlert` | `:SecurityIssue`, plus `:CVE` when it has one |
+| Semgrep findings | `:SemgrepSCAFinding` (dependencies), `:SemgrepSASTFinding` (code), `:SemgrepAISASTFinding` (AI code review), `:SemgrepSecretsFinding` (secrets) | `:CVE` on SCA findings with `has_cve = 'true'`, `:SecurityIssue` on the rest |
 
 Native properties worth filtering on, none of which the ontology projects for
 every provider:
@@ -182,6 +190,13 @@ every provider:
 - `:AWSInspectorFinding`: `name`, `type`, `severity`, `status`, `cve_id`,
   `fixavailable`, `exploitavailable`.
 - `:GitHubDependabotAlert`: `state`, `severity`.
+- Semgrep findings: `severity` on every kind. SCA, SAST and AI SAST findings
+  also have `triage_status` and `fix_status`; `:SemgrepSecretsFinding` has
+  `status` instead. `cve_id`, `dependency` and `reachability` on
+  `:SemgrepSCAFinding`; `title`, `rule_id` and `file_path` on
+  `:SemgrepSASTFinding` and `:SemgrepAISASTFinding`; `type` and
+  `validation_state` on `:SemgrepSecretsFinding`. Each links to its repository
+  through `FOUND_IN`, to `:GitHubRepository` or `:GitLabProject`.
 
 Native-label traps:
 
@@ -195,6 +210,9 @@ Native-label traps:
   the parent account and carries no ontology label.
 - A product name is never a label substring. Labels use the provider's own
   prefix, so `sentinelone` matches nothing: SentinelOne is `:S1AppFinding`.
+- There is no `:SemgrepFinding` label. "Semgrep findings" with no kind named
+  means all four labels:
+  `MATCH (n:SemgrepSCAFinding|SemgrepSASTFinding|SemgrepAISASTFinding|SemgrepSecretsFinding)`.
 - GuardDuty and Inspector findings belong to the account they are in through
   `MEMBER`: `(:AWSAccount)-[:MEMBER]->(n:AWSGuardDutyFinding)`. Their `RESOURCE`
   edge points at the account that collected them, which for a delegated
@@ -359,6 +377,8 @@ rather than implying the page is the whole set.
 - The query names exactly one label: the ontology label when the user named a
   category, that product's native label only when the user named the product.
   Never a union of labels, and never a native label for a generic request.
+  The one exception is a named product whose table row lists several native
+  labels: the query names exactly those, in one label expression.
 - Any AWS native label in the query is `AWS`-prefixed.
 - One `subimageRunCypher` call answered it, plus at most one schema call when the
   named product had no row. More than two means the entry gate was wrong and this

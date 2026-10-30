@@ -6,7 +6,7 @@
 	},
 	"metadata": {
 		"description": "Agent skills for SubImage, the cloud-native security platform: onboarding cloud/SaaS data sources and operator workflows over the SubImage MCP server.",
-		"version": "0.2.1"
+		"version": "0.2.2"
 	},
 	"plugins": [
 		{
