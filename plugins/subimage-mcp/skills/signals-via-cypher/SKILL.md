@@ -233,13 +233,20 @@ can have full vuln coverage with zero `:Image` nodes.
 | Node | Fields |
 |---|---|
 | `:VulnerabilitySignal:Signal` | `cve_id`, `service_image`, `status`, `first_seen`, `sources`, `public_exploit`, `exploit_maturity` |
-| `:CVEMetadata` | `id` (the CVE id), `title`, `description`, `base_severity`, `base_score`, `vector_string`, `cvss_version`, `published_date`, `is_kev`, `cisa_exploit_add`, `epss_score`, `epss_percentile` |
+| `:CVEMetadata` | `id` (the CVE id), `title`, `description`, `base_severity`, `base_score`, `vector_string`, `cvss_version`, `published_date`, `is_kev`, `is_kev_source`, `kev_date_added`, `kev_due_date`, `kev_ransomware_use`, `cisa_exploit_add`, `epss_score`, `epss_percentile`, `ssvc_exploitation`, `ssvc_automatable`, `ssvc_technical_impact` |
 | `:PackageVersion` | `name`, `version`, `type`, `purl` |
 | `:TrivyFix` | `id`, `version` (the fixed version string) |
 
 There is **no** `fixed_version` on `PackageVersion`. Reading one returns null on
 every row, which reads as "nothing is fixable" rather than as an error. The fix
 version lives on `TrivyFix.version`.
+
+`is_kev` comes from the CISA KEV catalog when that source ran (`is_kev_source =
+'kev'`), else from NVD's lagging copy. The `kev_*` fields are catalog-only, so read
+the KEV date as `coalesce(m.kev_date_added, m.cisa_exploit_add)`. Values are
+verbatim: `kev_ransomware_use` is `Known`/`Unknown`; SSVC exploitation, automatable
+and technical impact are `none`/`poc`/`active`, `yes`/`no` and `partial`/`total`,
+null when CISA has not scored the CVE.
 
 Severity lives on `CVEMetadata`, not on the Signal, and `base_severity` can be
 null. Derive it the way the product does:
@@ -268,10 +275,15 @@ MATCH (v:VulnerabilitySignal:Signal)-[:INSTANCE_OF]->(m:CVEMetadata)
 WHERE v.status IN ['active', 'accepted']
   AND (coalesce(m.is_kev, false) OR coalesce(v.public_exploit, false))
 RETURN DISTINCT v.cve_id AS cve, m.base_score AS cvss_score, v.status AS status,
-       coalesce(m.is_kev, false) AS kev, m.cisa_exploit_add AS kev_date
-ORDER BY cvss_score DESC
+       coalesce(m.is_kev, false) AS kev,
+       coalesce(m.kev_date_added, m.cisa_exploit_add) AS kev_date,
+       coalesce(m.kev_ransomware_use = 'Known', false) AS ransomware
+ORDER BY ransomware DESC, cvss_score DESC
 LIMIT 100
 ```
+
+This is the product's exploited filter. To rank what to patch, add
+`OR m.ssvc_exploitation = 'active'` inside the parentheses: CISA saw those exploited.
 
 Where a CVE actually runs:
 

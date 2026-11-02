@@ -57,7 +57,9 @@ RETURN DISTINCT m.id AS cve, m.title AS title, m.description AS description,
          ELSE 'UNKNOWN'
        END AS severity,
        m.base_score AS cvss_score, m.published_date AS published_date,
-       coalesce(m.is_kev, false) AS cisa_known_exploit, m.cisa_exploit_add AS kev_date,
+       coalesce(m.is_kev, false) AS cisa_known_exploit,
+       coalesce(m.kev_date_added, m.cisa_exploit_add) AS kev_date,
+       m.kev_ransomware_use AS kev_ransomware_use, m.ssvc_exploitation AS ssvc_exploitation,
        m.epss_score AS epss_score, m.epss_percentile AS epss_percentile,
        v.service_image AS service_image, v.status AS status,
        p.name AS package, p.version AS installed, fix.version AS fixed_in
@@ -65,10 +67,13 @@ ORDER BY service_image, package
 LIMIT 100
 ```
 
-Four things this query encodes that a shorter one gets wrong:
+Five things this query encodes that a shorter one gets wrong:
 
 - The severity `CASE` is the fallback the product applies. `base_severity` is
   null on some CVEs, and reading it raw silently drops them.
+- The KEV date prefers the CISA catalog's `kev_date_added` over NVD's
+  `cisa_exploit_add`. NVD's copy lags the catalog, so a newly listed KEV reads
+  as exploited with no date if you read only `cisa_exploit_add`.
 - The `EXISTS` clause pins each package to an artifact (`Image` or
   `FilesystemSnapshot`) the Signal actually affects. `ENRICHES` alone reaches
   every occurrence of that CVE across the fleet.
@@ -153,7 +158,7 @@ If nothing is fixable, note that explicitly in the summary; the next action shif
 
 SubImage tells you where the CVE lands; the public record tells you how dangerous it is in the wild. Reach for `WebSearch` **only when it would change the recommendation**, not for every CVE. Good triggers:
 
-- The CVE is KEV or critical, and the user is deciding patch priority.
+- The CVE is KEV, `ssvc_exploitation` is `active`, or it is critical, and the user is deciding patch priority.
 - No fix is available (need mitigations / workarounds from the advisory).
 - The CVE is very recent (exploit/PoC landscape still moving).
 - The user explicitly asks about real-world exploitability, PoCs, or active exploitation.
@@ -193,7 +198,7 @@ Output in this exact structure. Keep it scannable.
 ```
 # <CVE_ID>
 
-**Severity**: <critical/high/...>  •  **CVSS**: <score>  •  **KEV**: <yes/no>  •  **EPSS**: <score> (<percentile> pct)  •  **Published**: <date>
+**Severity**: <critical/high/...>  •  **CVSS**: <score>  •  **KEV**: <yes/no>  •  **SSVC exploitation**: <none/poc/active>  •  **EPSS**: <score> (<percentile> pct)  •  **Published**: <date>
 
 ## What it is
 <one-sentence description from the CVE record>
@@ -218,13 +223,15 @@ Output in this exact structure. Keep it scannable.
 <one line: patch this image first, bump this package across N services, redeploy this Railway revision, monitor and revisit, or accept and document>
 ```
 
-Omit `EPSS` from the header line if the record has no EPSS data (`epss_score` is null). Omit the **External context** section entirely when step 3 did not run. Omit the filesystem-snapshot / redeploy bullets when the CVE touches no snapshots. Omit the image / rebuild bullets when it touches no images. Never imply "no container impact" solely because the image count is zero if snapshots are present.
+Omit `EPSS` from the header line if the record has no EPSS data (`epss_score` is null), and `SSVC exploitation` if CISA has not scored the CVE (`ssvc_exploitation` is null). Omit the **External context** section entirely when step 3 did not run. Omit the filesystem-snapshot / redeploy bullets when the CVE touches no snapshots. Omit the image / rebuild bullets when it touches no images. Never imply "no container impact" solely because the image count is zero if snapshots are present.
 
 If KEV is `yes`, prepend a single-line callout above the title:
 
 ```
 ⚠️ KEV: actively exploited in the wild; prioritize over non-KEV criticals.
 ```
+
+When `kev_ransomware_use` is `Known`, say so in the callout ("⚠️ KEV, used in ransomware campaigns: ..."); it is the strongest patch-first signal the record carries. When KEV is `no` but `ssvc_exploitation` is `active`, CISA has seen exploitation without listing the CVE yet: use the same callout with "CISA SSVC: exploitation observed" and rank it with KEV, not behind it.
 
 ### 6. Offer the pivot to attack-path exploration
 
