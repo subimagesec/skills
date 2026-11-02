@@ -282,8 +282,8 @@ ORDER BY ransomware DESC, cvss_score DESC
 LIMIT 100
 ```
 
-Known ransomware use sorts first. When ranking what to patch, also add non-KEV
-CVEs with `ssvc_exploitation = 'active'`: CISA has seen them exploited.
+This is the product's exploited filter. To rank what to patch, add
+`OR m.ssvc_exploitation = 'active'` inside the parentheses: CISA saw those exploited.
 
 Where a CVE actually runs:
 
