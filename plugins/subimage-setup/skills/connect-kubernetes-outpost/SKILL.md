@@ -200,7 +200,7 @@ Reachability and authorization are two different halves, and which half the outp
 - **Helm path**: the chart covers both. With `rbac.create: true` (the default) it creates a ServiceAccount plus ClusterRole/ClusterRoleBinding, mounts the SA token, and the proxy injects `Authorization: Bearer <token>` on every request to the Kubernetes API. Nothing else to grant.
 - **Docker path, or Helm with `rbac.create: false`**: the outpost gives reachability only. Authorization has to come from elsewhere, e.g. a bearer token you supply (`BEARER_TOKEN` / `BEARER_TOKEN_PATH`), or the AWS-side path below for EKS.
 
-For EKS scanned through the AWS module's `SubImageScanRole` rather than the chart's ServiceAccount, grant that role cluster access. The full Access Entries / `aws-auth` recipe lives at https://app.subimage.io/docs/modules/eks. The short version:
+For EKS scanned through the AWS module's `SubImageScanRole` rather than the chart's ServiceAccount, grant that role cluster access. The full Access Entries / `aws-auth` recipe lives at https://docs.subimage.io/docs/modules/kubernetes/setup#eks-cluster-access. The short version:
 
 ```bash
 aws eks create-access-entry \
@@ -252,7 +252,7 @@ Settings → Outposts flags an outdated outpost version next to the hostname, wh
 
 ## References
 
-- Canonical doc: https://app.subimage.io/docs/subimage_outpost
+- Canonical doc: https://docs.subimage.io/docs/subimage_outpost
 - Outpost settings and registration key: `/settings/outposts` on the tenant's SubImage URL (`https://<slug>.subimage.io/settings/outposts`)
 - Outpost image: https://github.com/subimagesec/subimage-outpost
 - Helm chart: https://github.com/subimagesec/helm-charts

@@ -76,7 +76,7 @@ Most are **model-invocable**: the agent picks them up automatically from the des
 
 ## Prerequisites
 
-`subimage-mcp` skills run against the SubImage MCP server: https://app.subimage.io/docs/agents/connect_via_mcp
+`subimage-mcp` skills run against the SubImage MCP server: https://docs.subimage.io/docs/agents/connect_via_mcp
 
 `subimage-setup` skills run anywhere a shell or IaC repo lives; no tenant connection is required to generate the IaC code (only to verify it afterwards).
 
@@ -139,6 +139,6 @@ MIT. See [LICENSE](./LICENSE).
 
 - Project home: https://subimage.io
 - Public reference catalog: https://skills.subimage.io
-- SubImage MCP docs: https://app.subimage.io/docs/agents/connect_via_mcp
+- SubImage MCP docs: https://docs.subimage.io/docs/agents/connect_via_mcp
 - Codex plugin docs: https://developers.openai.com/codex/plugins/build
 - Cursor Agent Skills docs: https://cursor.com/docs/skills

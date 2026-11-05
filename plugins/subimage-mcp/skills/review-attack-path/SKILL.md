@@ -257,4 +257,4 @@ Confirm the team before creating. Same rule for `subimageSendNotification`: conf
 
 - Tool guide (always loaded by `subimageReadMe`): Domain 4 "Attack Path Analysis", Domain 1 "Knowledge Graph Exploration" for Cypher.
 - Companion skill for vulnerability triage that often pivots here: `subimage-mcp:investigate-cve`.
-- Architecture: https://app.subimage.io/docs/architecture/attack_path
+- Architecture: https://docs.subimage.io/docs/attack_paths

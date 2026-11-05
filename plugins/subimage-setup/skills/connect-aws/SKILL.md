@@ -148,7 +148,7 @@ Deploys the role into every existing and future account in the organization. Ser
        Value: !GetAtt SubImageScanRole.Arn
    ```
 
-   This matches the canonical template at https://app.subimage.io/docs/modules/aws. Every inline policy grants only read actions that `SecurityAudit` omits, so do not add actions that `SecurityAudit` already covers.
+   This matches the canonical template at https://docs.subimage.io/docs/modules/aws. Every inline policy grants only read actions that `SecurityAudit` omits, so do not add actions that `SecurityAudit` already covers.
 
 2. Create the StackSet with service-managed permissions:
 
@@ -439,5 +439,5 @@ Look for `aws` with `status: synced` and a recent `lastSyncEndedAt`.
 
 ## References
 
-- Canonical doc: https://app.subimage.io/docs/modules/aws
+- Canonical doc: https://docs.subimage.io/docs/modules/aws
 - StackSet limitations: AWS docs on service-managed permissions.

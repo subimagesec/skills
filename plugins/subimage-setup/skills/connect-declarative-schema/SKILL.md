@@ -371,6 +371,6 @@ Look for `declarative_schema` with `status: synced` and a recent `lastSyncEndedA
 
 ## References
 
-- Canonical doc: https://app.subimage.io/docs/modules/declarative_schema
+- Canonical doc: https://docs.subimage.io/docs/modules/declarative_schema
 - AWS connection (for the `<TENANT_ACCOUNT_ID>` / `<TENANT_ID>` values): `subimage-setup:connect-aws`
 - GCP connection (prerequisite for GCS path): `subimage-setup:connect-gcp`

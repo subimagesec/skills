@@ -138,5 +138,5 @@ Simplify before running:
 
 ## References
 
-- Canonical doc: https://app.subimage.io/docs/agents/connect_via_mcp
+- Canonical doc: https://docs.subimage.io/docs/agents/connect_via_mcp
 - The MCP tool selection guide is auto-loaded by the first call to `subimageReadMe`; rely on it for tool-to-domain mapping.

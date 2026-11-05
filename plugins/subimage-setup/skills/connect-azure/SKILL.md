@@ -186,7 +186,7 @@ Before the run, tell the user what it changes, because it writes to the same inv
 3. In **Modules → azure**: schedule **Manual**, `azure_tenant_id`, enable `azure_delegated_auth`, paste the JSON into `azure_delegated_access_token`, leave the client ID and secret empty. Save and **Run Sync**.
 4. Afterwards: disable delegated auth, clear the token, save.
 
-A Microsoft Graph token is rejected: the **microsoft** module has its own delegated sync with a Graph token. Full steps: https://app.subimage.io/docs/modules/azure/setup#one-time-delegated-sync
+A Microsoft Graph token is rejected: the **microsoft** module has its own delegated sync with a Graph token. Full steps: https://docs.subimage.io/docs/modules/azure/setup#one-time-delegated-sync
 
 ### AWS Secrets Manager option
 
@@ -229,6 +229,6 @@ Find the entry with `module_name: azure`. Expect `last_sync_status: success` and
 
 ## References
 
-- Canonical doc: https://app.subimage.io/docs/modules/azure
-- Secrets account setup: https://app.subimage.io/docs/secrets
-- Microsoft module (Entra + Intune): https://app.subimage.io/docs/modules/microsoft
+- Canonical doc: https://docs.subimage.io/docs/modules/azure
+- Secrets account setup: https://docs.subimage.io/docs/secrets
+- Microsoft module (Entra + Intune): https://docs.subimage.io/docs/modules/microsoft
