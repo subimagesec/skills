@@ -170,6 +170,6 @@ Expect `state: active`. Public org data is readable by anyone, so check membersh
 
 ## References
 
-- Canonical doc: https://app.subimage.io/docs/modules/github
-- Secrets account setup: https://app.subimage.io/docs/secrets
-- Integrations overview: https://app.subimage.io/docs/integrations
+- Canonical doc: https://docs.subimage.io/docs/modules/github
+- Secrets account setup: https://docs.subimage.io/docs/secrets
+- Integrations overview: https://docs.subimage.io/docs/integrations

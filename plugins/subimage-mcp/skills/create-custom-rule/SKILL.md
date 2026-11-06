@@ -233,6 +233,6 @@ An active finding can lack its `AFFECTS` edge, so attach the asset with `OPTIONA
 
 ## References
 
-- Custom rules in SubImage: https://app.subimage.io/docs/custom_rules
-- SubImage MCP setup: https://app.subimage.io/docs/agents/connect_via_mcp
+- Custom rules in SubImage: https://docs.subimage.io/docs/custom_rules
+- SubImage MCP setup: https://docs.subimage.io/docs/agents/connect_via_mcp
 - Schema discovery and Cypher authoring: [`build-cypher-query`](../build-cypher-query/SKILL.md)

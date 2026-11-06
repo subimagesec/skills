@@ -101,7 +101,7 @@ Both sides are SubImage module slugs after step 1's normalization. If you skippe
 For each gap, classify:
 
 - **Tier 1 (skill exists)**: `aws`, `gcp`, `azure`, `github`, `kubernetes` (use `connect-kubernetes-outpost` when the cluster API is private), `declarative_schema`. Link directly to the matching `subimage-setup:connect-<module>` skill (loaded by the SubImage marketplace plugin).
-- **Tier 2 (no skill yet)**: any other module SubImage supports. Link to `https://app.subimage.io/docs/modules/<module>`.
+- **Tier 2 (no skill yet)**: any other module SubImage supports. Link to `https://docs.subimage.io/docs/modules/<module>`.
 - **No SubImage module**: e.g. `datadog`. Note it without a link.
 
 Also note the inverse: modules enabled in SubImage that you do NOT see in the repo. Usually fine (they may be wired elsewhere), but worth flagging if it is something the user clearly does not own anymore.

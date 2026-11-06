@@ -370,6 +370,6 @@ Look for `gcp` with `status: synced`. If the sync fails with GCP API `PERMISSION
 
 ## References
 
-- Canonical doc: https://app.subimage.io/docs/modules/gcp
-- Secrets account setup: https://app.subimage.io/docs/secrets
+- Canonical doc: https://docs.subimage.io/docs/modules/gcp
+- Secrets account setup: https://docs.subimage.io/docs/secrets
 - Workload Identity Federation with AWS: https://cloud.google.com/iam/docs/workload-identity-federation-with-other-clouds
