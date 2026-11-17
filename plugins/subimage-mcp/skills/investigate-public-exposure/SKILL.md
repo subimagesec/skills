@@ -40,7 +40,7 @@ Ask for a missing value only when needed:
 ## Operating rules
 
 - Call `subimageReadMe` once per session before using SubImage MCP tools.
-- Call `subimageListModules` early. If a relevant module is disabled, degraded, stale, or still syncing, report that coverage limitation.
+- Call `subimageListModules` early. Report a coverage limitation if a relevant module is disabled, its newest run failed or degraded, it has no `last_successful_sync_completed_at` (it never succeeded, or the server does not report the field, so its freshness is unknown), or that completion is older than the module's sync cadence. A sync in progress is not a limitation when a successful run exists: the graph keeps serving that run.
 - Use `subimage-mcp:build-cypher-query` discipline. Schema-validate labels, properties, and relationship examples with `subimageGetNodesSchema` and `searchModelQueries` before trusting a template.
 - Use `references/cypher-templates.md` only as a routing index, then load just the relevant provider or query-family file. Treat templates as probes, not proof, until adjusted to the live schema.
 - Prefer provider-independent ontology pivots when they exist: `PublicIP`, `LoadBalancer`, `DNSRecord`, `ObjectStorage`, `Function`, `Database`, `ComputeInstance`, `ComputeCluster`, `ComputeService`, `ComputePod`, `Container`, and `Snapshot`.
